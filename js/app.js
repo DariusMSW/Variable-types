@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  var LS_KEY = 'c-variablentypen-fortschritt-v1';
+  var LS_KEY = 'c-variablentypen-fortschritt-v2';
   var state = { solved: {} };     // taskId -> true (im 1. Versuch) / false
   var main, cheatPanel, cheatBtn;
 
@@ -151,16 +151,15 @@
   function range(name) {
     var t = TYPE_INFO[name];
     if (!t) return null;
-    if (t.kind === 'bool') return { min: 0n, max: 1n };
-    if (t.kind !== 'int') return null;
+    if (t.kind !== 'ganz') return null;
     var bits = BigInt(t.bytes * 8);
-    if (t.signed) return { min: -(1n << (bits - 1n)), max: (1n << (bits - 1n)) - 1n };
+    if (t.vz) return { min: -(1n << (bits - 1n)), max: (1n << (bits - 1n)) - 1n };
     return { min: 0n, max: (1n << bits) - 1n };
   }
-  function wrap(v, bits, signed) {
+  function wrap(v, bits, vz) {
     var m = 1n << BigInt(bits);
     var r = ((v % m) + m) % m;
-    if (signed && r >= m / 2n) r -= m;
+    if (vz && r >= m / 2n) r -= m;
     return r;
   }
   function parseInt64(str) {
@@ -171,8 +170,10 @@
 
   /* ---------- Syntax-Highlighting ---------- */
   var KW = {}, TY = {};
-  'if else for while do return sizeof struct const static void break continue switch case default typedef unsigned signed true false'.split(' ').forEach(function (w) { KW[w] = 1; });
-  'int char short long float double bool size_t int8_t uint8_t int16_t uint16_t int32_t uint32_t int64_t uint64_t'.split(' ').forEach(function (w) { TY[w] = 1; });
+  'if else for while do return sizeof struct const static void break continue switch case default typedef'.split(' ').forEach(function (w) { KW[w] = 1; });
+  /* 'int' nur fuer `int main(void)`, 'float'/'double' nur fuer die typedef-Zeile in Level 5 */
+  'int float double size_t int8_t uint8_t int16_t uint16_t int32_t uint32_t int64_t uint64_t float32_t float64_t'.split(' ').forEach(function (w) { TY[w] = 1; });
+  var PRI_MACRO = /^(PRI|SCN)[diouxX](8|16|32|64)$/;
   var TOKEN = /(\/\/.*$)|(\/\*.*?\*\/)|("(?:\\.|[^"\\])*")|('(?:\\.|[^'\\])*')|(____)|(\b0[xX][0-9a-fA-F]+\b|\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[fFuUlL]*)|([A-Za-z_]\w*)/g;
 
   function highlightLine(line) {
@@ -187,7 +188,7 @@
       else if (m[3] || m[4]) cls = 'tok-str';
       else if (m[5]) cls = 'tok-blank';
       else if (m[6]) cls = 'tok-num';
-      else if (m[7]) cls = TY[txt] ? 'tok-type' : (KW[txt] ? 'tok-kw' : (line.charAt(TOKEN.lastIndex) === '(' ? 'tok-fn' : null));
+      else if (m[7]) cls = TY[txt] ? 'tok-type' : PRI_MACRO.test(txt) ? 'tok-pre' : (KW[txt] ? 'tok-kw' : (line.charAt(TOKEN.lastIndex) === '(' ? 'tok-fn' : null));
       frag.appendChild(cls ? el('span', { class: cls }, txt) : document.createTextNode(txt));
       last = TOKEN.lastIndex;
     }
@@ -271,8 +272,9 @@
       var info = TYPE_INFO[r.type], rg = range(r.type);
       var rangeText = r.rangeText || (rg ? fmt(rg.min) + ' bis ' + fmt(rg.max) : '');
       tbody.appendChild(el('tr', null, [
-        el('th', { scope: 'row' }, el('code', null, r.type)),
-        el('td', null, r.bytesText || String(info.bytes)),
+        el('th', { scope: 'row' }, [el('code', null, r.type), r.star ? ' *' : null]),
+        el('td', null, String(info.bytes)),
+        el('td', null, String(info.bytes * 8)),
         el('td', null, [rangeText, r.note ? el('small', null, ' (' + r.note + ')') : null]),
         el('td', null, el('code', null, r.fmt))
       ]));
@@ -282,12 +284,13 @@
         el('h2', { id: 'cheat-title' }, 'Spickzettel'),
         el('button', { type: 'button', class: 'btn ghost', onclick: function () { toggleCheat(false); } }, 'Schliessen')
       ]),
-      el('p', null, rich('Referenzplattform: PC mit Windows oder 64-bit Linux (x86-64). Der C-Standard garantiert nur Mindestgrössen – exakte Grössen liefern die Typen aus `<stdint.h>`. `long` ist plattformabhängig. Für die PRI…-Makros: `#include <inttypes.h>`, Verwendung z.B. `printf("%" PRIu8, x)`.')),
+      el('p', null, rich('Alle Typen haben auf jeder Plattform genau dieselbe Grösse. Ganzzahltypen: `#include <stdint.h>`. Für die PRI…-Makros: `#include <inttypes.h>`, Verwendung z.B. `printf("%" PRIu8 "\\n", x);`.')),
       el('div', { class: 'table-wrap' }, el('table', null, [
-        el('thead', null, el('tr', null, [el('th', null, 'Typ'), el('th', null, 'Bytes'), el('th', null, 'Wertebereich'), el('th', null, 'printf')])),
+        el('thead', null, el('tr', null, [el('th', null, 'Typ'), el('th', null, 'Bytes'), el('th', null, 'Bits'), el('th', null, 'Wertebereich'), el('th', null, 'printf')])),
         tbody
       ])),
-      el('p', { class: 'small' }, rich('Formeln: unsigned n Bit: 0 … 2ⁿ − 1, signed n Bit: −2ⁿ⁻¹ … 2ⁿ⁻¹ − 1. `sizeof` ausgeben mit `%zu`.'))
+      el('p', { class: 'small' }, rich('Formeln: ohne Vorzeichen (`uintN_t`): 0 … 2ⁿ − 1, mit Vorzeichen (`intN_t`): −2ⁿ⁻¹ … 2ⁿ⁻¹ − 1. `sizeof` ausgeben mit `%zu`.')),
+      el('p', { class: 'small' }, rich('* `float32_t` und `float64_t` stehen nicht in `<stdint.h>`. Viele Embedded-Projekte und Coding-Standards (z.B. MISRA, ARM CMSIS) stellen sie per typedef in einer eigenen Header-Datei bereit – hier `#include "types.h"` (Details in der Info zu Level 5). Ausgabe für beide mit `%f`.'))
     ]);
   }
   function toggleCheat(show) {
@@ -611,7 +614,7 @@
       el('div', { class: 'eyebrow' }, 'Abschlussprüfung bestanden'),
       el('h1', null, 'Herzlichen Glückwunsch!'),
       el('p', { class: 'big' }, 'Du hast ' + ef + ' von ' + LEVELS[exam].tasks.length + ' Prüfungsaufgaben im ersten Versuch richtig gelöst – insgesamt ' + allFirst + ' von ' + all + ' Aufgaben.'),
-      el('p', null, 'Du weisst jetzt, wie gross die C-Typen sind, welche Werte hineinpassen, wie Bits und Zweierkomplement funktionieren, warum es stdint.h gibt, wie man sparsam Typen wählt, typische Typ-Fehler erkennt und structs ohne verschwendetes Padding baut. Das ist eine richtig solide Grundlage!'),
+      el('p', null, 'Du weisst jetzt, warum man Typen mit fester Grösse verwendet, wie gross sie sind, welche Werte hineinpassen, wie Bits und Zweierkomplement funktionieren, wann float32_t reicht, wie man sparsam Typen wählt, typische Typ-Fehler erkennt und structs ohne verschwendetes Padding baut. Das ist eine richtig solide Grundlage!'),
       list,
       el('div', { class: 'actions' }, [
         el('button', { type: 'button', class: 'btn', onclick: showPlayground }, 'Zur Spielwiese'),
@@ -679,15 +682,15 @@
       setTimeout(function () { input.focus(); }, 0);
     },
     bits: function (t, ctx, box) {
-      var w = bitWidget(t.bits, t.mode === 'signed' ? 'signed' : 'unsigned');
+      var w = bitWidget(t.bits, t.mode === 'mitVZ' ? 'mitVZ' : 'ohneVZ');
       box.appendChild(w.node);
       box.appendChild(el('div', { class: 'actions left' }, [
         el('button', { type: 'button', class: 'btn', onclick: function () {
           if (ctx.isFinished()) return;
-          var v = t.mode === 'signed' ? w.signedValue() : w.unsignedValue();
+          var v = t.mode === 'mitVZ' ? w.signedValue() : w.unsignedValue();
           if (v === BigInt(t.target)) { w.lock(); ctx.right(); }
-          else ctx.wrong('Eingestellt ist ' + (t.mode === 'signed' ? 'signed ' : '') + fmt(v) + ', gesucht ist ' + fmt(BigInt(t.target)) + '. ' +
-            (t.mode === 'signed' && t.target < 0 ? 'Denk daran: das oberste Bit zählt negativ.' : 'Addiere die Wertigkeiten der eingeschalteten Bits.'));
+          else ctx.wrong('Eingestellt ist ' + (t.mode === 'mitVZ' ? 'mit Vorzeichen ' : '') + fmt(v) + ', gesucht ist ' + fmt(BigInt(t.target)) + '. ' +
+            (t.mode === 'mitVZ' && t.target < 0 ? 'Denk daran: das oberste Bit zählt negativ.' : 'Addiere die Wertigkeiten der eingeschalteten Bits.'));
         } }, 'Prüfen'),
         el('button', { type: 'button', class: 'btn ghost', onclick: function () { if (!ctx.isFinished()) w.set(0n); } }, 'Alle auf 0')
       ]));
@@ -721,8 +724,8 @@
     for (var k = 0; k < n; k++) {
       (function (idx) {
         var weight = n - 1 - idx;
-        var label = idx === 0 ? (emphasis === 'signed' ? '−2' + sup(weight) : '2' + sup(weight)) : '2' + sup(weight);
-        var b = el('button', { type: 'button', class: 'bit', 'aria-label': 'Bit ' + weight + ' (Wert ' + (idx === 0 && emphasis === 'signed' ? '-' : '') + (1n << BigInt(weight)).toString() + ')' });
+        var label = idx === 0 ? (emphasis === 'mitVZ' ? '−2' + sup(weight) : '2' + sup(weight)) : '2' + sup(weight);
+        var b = el('button', { type: 'button', class: 'bit', 'aria-label': 'Bit ' + weight + ' (Wert ' + (idx === 0 && emphasis === 'mitVZ' ? '-' : '') + (1n << BigInt(weight)).toString() + ')' });
         b.addEventListener('click', function () { if (locked) return; bits[idx] ^= 1; refresh(); });
         btns.push(b);
         var cell = el('div', { class: 'bit-cell' + (idx % 8 === 0 && idx ? ' byte-start' : '') }, [b, el('span', { class: 'weight', 'aria-hidden': 'true' }, label)]);
@@ -732,8 +735,8 @@
     var node = el('div', { class: 'bit-widget' }, [
       row,
       el('div', { class: 'bit-values' }, [
-        el('div', { class: emphasis === 'unsigned' ? 'em' : '' }, [el('span', null, 'unsigned (uint' + n + '_t): '), outU]),
-        el('div', { class: emphasis === 'signed' ? 'em' : '' }, [el('span', null, 'signed (int' + n + '_t): '), outS]),
+        el('div', { class: emphasis === 'ohneVZ' ? 'em' : '' }, [el('span', null, 'ohne Vorzeichen (uint' + n + '_t): '), outU]),
+        el('div', { class: emphasis === 'mitVZ' ? 'em' : '' }, [el('span', null, 'mit Vorzeichen (int' + n + '_t): '), outS]),
         el('div', null, [el('span', null, 'hex: '), outH])
       ])
     ]);
@@ -759,9 +762,9 @@
   function fitsBasic(t, name) {
     var info = TYPE_INFO[name];
     var min = BigInt(t.min), max = BigInt(t.max);
-    if (info.kind === 'float') {
+    if (info.kind === 'komma') {
       if (!t.decimals) return { ok: false, msg: 'Für ganze Zahlen ist ein Kommazahltyp ungeeignet: ungenau bei grossen Werten und unnötig. Nimm einen Ganzzahltyp.' };
-      if ((t.digits || 0) > info.digits) return { ok: false, msg: '`' + name + '` hat nur ca. ' + info.digits + '–' + (info.digits + 1) + ' signifikante Stellen – zu ungenau für ' + t.digits + ' Stellen.' };
+      if ((t.digits || 0) > info.digits) return { ok: false, msg: '`' + name + '` schafft nur ca. ' + info.digits + '–' + (info.digits + 1) + ' signifikante Stellen (sicher ' + info.digits + ') – zu ungenau für ' + t.digits + ' Stellen.' };
       return { ok: true };
     }
     if (t.decimals) {
@@ -772,7 +775,7 @@
     if (min < r.min || max > r.max) {
       var bad = min < r.min ? min : max;
       var bits = info.bytes * 8;
-      var became = info.kind === 'bool' ? (bad !== 0n ? 1n : 0n) : wrap(bad, bits, info.signed);
+      var became = wrap(bad, bits, info.vz);
       return { ok: false, msg: '`' + name + '` reicht nur von ' + fmt(r.min) + ' bis ' + fmt(r.max) + '. Der Wert ' + fmt(bad) + ' passt nicht hinein – gespeichert würde ' + fmt(became) + '.' };
     }
     return { ok: true };
@@ -948,12 +951,12 @@
     function bitsOf() { return TYPE_INFO[cur.type].bytes * 8; }
     function rebuild() {
       clear(widgetBox);
-      w = bitWidget(bitsOf(), TYPE_INFO[cur.type].signed ? 'signed' : 'unsigned');
+      w = bitWidget(bitsOf(), TYPE_INFO[cur.type].vz ? 'mitVZ' : 'ohneVZ');
       widgetBox.appendChild(w.node);
       // Bit-Klicks aktualisieren den Wert
       w.node.addEventListener('click', function (e) {
         if (e.target && e.target.classList && e.target.classList.contains('bit')) {
-          cur.v = TYPE_INFO[cur.type].signed ? w.signedValue() : w.unsignedValue();
+          cur.v = TYPE_INFO[cur.type].vz ? w.signedValue() : w.unsignedValue();
           input.value = cur.v.toString();
         }
       });
@@ -963,16 +966,16 @@
     }
     function setValue(raw, opText) {
       var t = TYPE_INFO[cur.type], r = range(cur.type);
-      var nv = wrap(raw, bitsOf(), t.signed);
+      var nv = wrap(raw, bitsOf(), t.vz);
       clear(log);
       if (raw !== nv) {
         log.className = 'feedback bad';
         log.appendChild(el('strong', null, 'Überlauf! '));
         log.appendChild(document.createTextNode((opText ? opText + ' ergibt ' + fmt(raw) : 'Der Wert ' + fmt(raw)) + ', das passt nicht in ' + cur.type + ' (' + fmt(r.min) + ' … ' + fmt(r.max) + '). Gespeichert wird ' + fmt(nv) + '.'));
-        log.appendChild(el('p', null, t.signed
-          ? (opText ? 'Achtung: Ein Überlauf bei signed Typen ist in C undefiniertes Verhalten! Hier wird das typische Wraparound (Zweierkomplement) gezeigt – verlass dich im echten Code nie darauf.'
-                    : 'Hinweis: Eine Umwandlung eines zu grossen Werts in einen signed Typ ist implementierungsabhängig; gezeigt wird das übliche Wraparound.')
-          : 'Bei unsigned Typen ist das Wraparound in C genau festgelegt: Es wird modulo 2^' + bitsOf() + ' gerechnet.'));
+        log.appendChild(el('p', null, t.vz
+          ? (opText ? 'Achtung: Ein Überlauf bei Typen mit Vorzeichen (intN_t) ist in C undefiniertes Verhalten! Hier wird das typische Wraparound (Zweierkomplement) gezeigt – verlass dich im echten Code nie darauf.'
+                    : 'Hinweis: Die Umwandlung eines zu grossen Werts in einen Typ mit Vorzeichen ist implementierungsabhängig; gezeigt wird das übliche Wraparound.')
+          : 'Bei Typen ohne Vorzeichen (uintN_t) ist das Wraparound in C genau festgelegt: Es wird modulo 2^' + bitsOf() + ' gerechnet.'));
       } else {
         log.className = 'feedback info';
         log.appendChild(el('strong', null, 'Wert: ' + fmt(nv)));
@@ -984,7 +987,7 @@
     }
     function op(d) { setValue(cur.v + d, fmt(cur.v) + (d < 0n ? ' − ' + fmt(-d) : ' + ' + fmt(d))); }
 
-    sel.addEventListener('change', function () { cur.type = sel.value; cur.v = wrap(cur.v, bitsOf(), TYPE_INFO[cur.type].signed); rebuild(); });
+    sel.addEventListener('change', function () { cur.type = sel.value; cur.v = wrap(cur.v, bitsOf(), TYPE_INFO[cur.type].vz); rebuild(); });
     var form = el('form', { class: 'num-form' }, [el('label', { for: 'pg-val' }, 'Wert:'), input, el('button', { type: 'submit', class: 'btn' }, 'Setzen')]);
     form.addEventListener('submit', function (e) {
       e.preventDefault();
