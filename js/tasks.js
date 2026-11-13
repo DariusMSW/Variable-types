@@ -824,3 +824,17 @@ var BIT_SAYS = {
   play: 'Hier kannst du nichts kaputt machen. Ausser den Wertebereich.',
   rankUp: 'Neuer Rang!'
 };
+
+/* Sprueche, wenn man Bit anstupst. Du-Form, Schweizer Schreibweise. */
+var BIT_POKE = [
+  'Hey, das kitzelt! Zum Glück bin ich gegen Bitflips versiegelt.',
+  'Wusstest du? Ein Byte hat 8 Bit – ich bin also nur ein Achtel davon.',
+  '`uint8_t` geht von 0 bis 255. Mehr Finger hab ich leider nicht.',
+  '`int32_t` schafft gut 2 Milliarden. Ich zähle trotzdem lieber bis 1.',
+  'Mit `int64_t` könntest du jede Sekunde seit dem Urknall zählen. Und noch viel mehr.',
+  'Ein Nibble sind 4 Bit. Klingt nach Znüni, ist aber ein halbes Byte.',
+  'Wenn ein `uint8_t` bei 255 noch eins drauflegt, fängt er wieder bei 0 an. Kreislauf des Lebens.',
+  'Signed oder unsigned? Ich bin heute eher positiv eingestellt.',
+  'Psst: `sizeof(char)` ist immer 1. Das ist mein Lieblingsfakt.',
+  'Ich bin ganz Ohr. Also, ganz Pin.'
+];

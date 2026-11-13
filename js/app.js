@@ -86,36 +86,114 @@
     party:   { eyes: [[5, 7, 1, 1], [6, 6, 1, 1], [7, 7, 1, 1], [9, 7, 1, 1], [10, 6, 1, 1], [11, 7, 1, 1]],
                mouth: [[6, 10, 4, 2]], tongue: true, cheeks: true, sparkles: true, arms: true }
   };
-  function bitSvg(mood) {
+  function px(p, x, y, w, h, cls) { p.appendChild(svgEl('rect', { x: x, y: y, width: w, height: h, class: cls })); }
+  function grp(p, cls) { var n = svgEl('g', { class: cls }); p.appendChild(n); return n; }
+  // Gesicht (Augen, Mund, Wangen, Schweiss) neu zeichnen – auch fuer Stimmungswechsel
+  function drawFace(face, mood) {
     var m = MOOD_PIXELS[mood] || MOOD_PIXELS.neutral;
-    var s = svgEl('svg', { viewBox: '-3 -3 22 22', class: 'bit-svg', 'aria-hidden': 'true', focusable: 'false', 'shape-rendering': 'crispEdges' });
-    function r(x, y, w, h, cls) { s.appendChild(svgEl('rect', { x: x, y: y, width: w, height: h, class: cls })); }
-    // Pins
-    [4, 7, 10].forEach(function (y) { r(0, y, 2, 1, 'px-ink'); r(14, y, 2, 1, 'px-ink'); });
-    [5, 10].forEach(function (x) { r(x, 0, 1, 2, 'px-ink'); r(x, 14, 1, 2, 'px-ink'); });
-    if (m.arms) { r(-2, 1, 1, 3, 'px-ink'); r(-1, 4, 1, 1, 'px-ink'); r(17, 1, 1, 3, 'px-ink'); r(16, 4, 1, 1, 'px-ink'); }
+    while (face.firstChild) face.removeChild(face.firstChild);
+    var eyes = grp(face, 'bit-eyes'), mouth = grp(face, 'bit-mouth');
+    m.eyes.forEach(function (e) { px(eyes, e[0], e[1], e[2], e[3], 'px-ink'); });
+    m.mouth.forEach(function (e) { px(mouth, e[0], e[1], e[2], e[3], 'px-ink'); });
+    if (m.tongue) px(mouth, 7, 11, 2, 1, 'px-red');
+    if (m.cheeks) { px(face, 4, 9, 1, 1, 'px-red'); px(face, 11, 9, 1, 1, 'px-red'); }
+    if (m.sweat) { var sw = grp(face, 'bit-sweat'); px(sw, 12, 4, 1, 1, 'px-blue'); px(sw, 12, 5, 1, 2, 'px-blue'); }
+    var lids = grp(face, 'bit-lids');
+    px(lids, 5, 7, 2, 1, 'px-ink'); px(lids, 9, 7, 2, 1, 'px-ink');
+  }
+  function setBitMood(svg, mood) {
+    var face = svg && svg.querySelector('.bit-face');
+    if (face) drawFace(face, mood);
+  }
+  // Zufaelliges Blinzeln alle 3–6 s; stoppt, sobald Bit nicht mehr im DOM ist
+  function startBlink(svg) {
+    if (reducedMotion()) return;
+    function next() { setTimeout(tick, 3000 + Math.random() * 3000); }
+    function tick() {
+      if (!svg.isConnected) return;
+      svg.classList.add('blink');
+      setTimeout(function () { svg.classList.remove('blink'); }, 130);
+      next();
+    }
+    next();
+  }
+  // Reaktions-Klasse kurz setzen (neu startbar)
+  function bitPlay(svg, cls, ms) {
+    var g = svg && svg.querySelector('.bit-react');
+    if (!g) return;
+    g.classList.remove(cls); void svg.getBoundingClientRect(); g.classList.add(cls);
+    setTimeout(function () { g.classList.remove(cls); }, ms);
+  }
+  function bitSvg(mood, opts) {
+    opts = opts || {};
+    var m = MOOD_PIXELS[mood] || MOOD_PIXELS.neutral;
+    var s = svgEl('svg', { viewBox: '-3 -3 22 22', class: 'bit-svg', 'aria-hidden': 'true', focusable: 'false', 'shape-rendering': 'crispEdges',
+      style: '--bd:-' + (Math.random() * 3).toFixed(2) + 's' });
+    var fx = grp(s, 'bit-fx');
+    var react = grp(s, 'bit-react'), breathe = grp(react, 'bit-breathe');
+    // Pins (Beinchen) als eigene Gruppen
+    var pl = grp(breathe, 'bit-pins bit-pins-l'), pr = grp(breathe, 'bit-pins bit-pins-r'), pv = grp(breathe, 'bit-pins bit-pins-v');
+    [4, 7, 10].forEach(function (y) { px(pl, 0, y, 2, 1, 'px-ink'); px(pr, 14, y, 2, 1, 'px-ink'); });
+    [5, 10].forEach(function (x) { px(pv, x, 0, 1, 2, 'px-ink'); px(pv, x, 14, 1, 2, 'px-ink'); });
+    if (m.arms) {
+      var al = grp(breathe, 'bit-arm bit-arm-l'), ar = grp(breathe, 'bit-arm bit-arm-r');
+      px(al, -2, 1, 1, 3, 'px-ink'); px(al, -1, 4, 1, 1, 'px-ink'); px(ar, 17, 1, 1, 3, 'px-ink'); px(ar, 16, 4, 1, 1, 'px-ink');
+    }
     // Koerper mit Kontur
-    r(2, 2, 12, 12, 'px-ink');
-    r(3, 3, 10, 10, 'px-body');
-    r(3, 3, 10, 1, 'px-light');
-    r(11, 11, 1, 1, 'px-dot');
-    m.eyes.forEach(function (e) { r(e[0], e[1], e[2], e[3], 'px-ink'); });
-    m.mouth.forEach(function (e) { r(e[0], e[1], e[2], e[3], 'px-ink'); });
-    if (m.tongue) r(7, 11, 2, 1, 'px-red');
-    if (m.cheeks) { r(4, 9, 1, 1, 'px-red'); r(11, 9, 1, 1, 'px-red'); }
-    if (m.sweat) { r(12, 4, 1, 1, 'px-blue'); r(12, 5, 1, 2, 'px-blue'); }
+    px(breathe, 2, 2, 12, 12, 'px-ink');
+    px(breathe, 3, 3, 10, 10, 'px-body');
+    px(breathe, 3, 3, 10, 1, 'px-light');
+    px(breathe, 11, 11, 1, 1, 'px-dot bit-led');
+    drawFace(grp(breathe, 'bit-face'), mood);
+    // Effekte ausserhalb des Koerpers
     if (m.sparkles) {
-      [[-2, -2], [17, -2], [-3, 12], [18, 13]].forEach(function (p) {
-        r(p[0], p[1] + 1, 3, 1, 'px-yellow'); r(p[0] + 1, p[1], 1, 3, 'px-yellow');
+      var sp = grp(fx, 'bit-sparkles');
+      [[-2, -2], [17, -2], [-3, 12], [18, 13]].forEach(function (p, i) {
+        var one = grp(sp, 'bit-spark s' + i);
+        px(one, p[0], p[1] + 1, 3, 1, 'px-yellow'); px(one, p[0] + 1, p[1], 1, 3, 'px-yellow');
       });
     }
+    if (mood === 'oops') { var ex = grp(fx, 'bit-alert'); px(ex, 15, -3, 1, 3, 'px-red'); px(ex, 15, 1, 1, 1, 'px-red'); }
+    var st = opts.streak || 0;
+    if (st >= 3) {
+      s.classList.add('streak-' + (st >= 8 ? 8 : st >= 5 ? 5 : 3));
+      var plus = grp(fx, 'bit-plus');
+      px(plus, 14, -2, 3, 1, 'px-yellow'); px(plus, 15, -3, 1, 3, 'px-yellow'); px(plus, 18, -3, 1, 3, 'px-yellow');
+    }
+    if (st >= 8) {
+      var heat = grp(fx, 'bit-heat');
+      [[4, 'px-red'], [8, 'px-yellow'], [12, 'px-red']].forEach(function (h, i) { px(grp(heat, 'h' + i), h[0], -1, 1, 1, h[1]); });
+    }
+    if (!opts.still) startBlink(s);
     return s;
   }
+  // Klick/Tap auf Bit: Hüpfer + Spruch; ≥5 schnelle Klicks = Stack Overflow
+  function bitPokeable(fig, svg, mood, bubble) {
+    var hits = [];
+    fig.addEventListener('click', function () {
+      var now = Date.now();
+      hits = hits.filter(function (t) { return now - t < 2500; });
+      hits.push(now);
+      var msg;
+      if (hits.length >= 5) {
+        hits = [];
+        bitPlay(svg, 'bit-tumble', 900);
+        setBitMood(svg, 'oops');
+        setTimeout(function () { if (svg.isConnected) setBitMood(svg, mood); }, 900);
+        msg = 'Stack Overflow! Zu viele Aufrufe auf einmal – ich brauch kurz einen frischen Stack.';
+      } else {
+        bitPlay(svg, 'bit-poke', 450);
+        msg = typeof BIT_POKE !== 'undefined' ? pickNew('poke', BIT_POKE) : 'Hallo!';
+      }
+      if (bubble) { clear(bubble); bubble.appendChild(rich(msg)); }
+    });
+  }
   function mascot(mood, text, extraClass) {
-    return el('div', { class: 'bit-say mood-' + mood + (extraClass ? ' ' + extraClass : '') }, [
-      el('div', { class: 'bit-figure' }, bitSvg(mood)),
-      text ? el('div', { class: 'bubble' }, typeof text === 'string' ? rich(text) : text) : null
-    ]);
+    var svg = bitSvg(mood);
+    var bubble = text ? el('div', { class: 'bubble', 'aria-live': 'polite' }, typeof text === 'string' ? rich(text) : text) : null;
+    var fig = el('button', { type: 'button', class: 'bit-figure bit-btn', 'aria-label': 'Bit anstupsen' }, svg);
+    bitPokeable(fig, svg, mood, bubble);
+    return el('div', { class: 'bit-say mood-' + mood + (extraClass ? ' ' + extraClass : '') }, [fig, bubble]);
   }
 
   /* ---------- Konfetti (eckige DOM-Schnipsel) ---------- */
@@ -523,7 +601,7 @@
           streakMsg = BIT_SAYS.streak[run.n] || null;
         }
         showFeedback(feedback, 'good', pickNew('right', BIT_SAYS.right) + (wrongs === 0 ? '' : BIT_SAYS.retryRight), [extra, task.explain],
-          streakMsg ? 'party' : 'happy', streakMsg);
+          streakMsg ? 'party' : 'happy', streakMsg, streakMsg ? run.n : 0);
         card.classList.remove('shake'); card.classList.add('pop');
         nextBtn.hidden = false;
         updateTop();
@@ -549,7 +627,7 @@
     focusMain();
   }
 
-  function showFeedback(box, kind, title, texts, mood, special) {
+  function showFeedback(box, kind, title, texts, mood, special, streak) {
     clear(box);
     box.hidden = false;
     box.className = 'feedback ' + kind + (mood ? ' with-bit' : '');
@@ -557,7 +635,12 @@
     if (special) body.appendChild(el('div', { class: 'fb-special' }, special));
     body.appendChild(el('strong', null, title));
     texts.forEach(function (t) { if (t) body.appendChild(el('p', null, typeof t === 'string' ? rich(t) : t)); });
-    if (mood) box.appendChild(el('div', { class: 'bit-figure fb-bit mood-' + mood }, bitSvg(mood)));
+    if (mood) {
+      var fsvg = bitSvg(mood, { streak: streak });
+      box.appendChild(el('div', { class: 'bit-figure fb-bit mood-' + mood }, fsvg));
+      // nach dem Wackeln wieder ruhig schauen
+      if (mood === 'oops') setTimeout(function () { if (fsvg.isConnected) setBitMood(fsvg, 'neutral'); }, 1100);
+    }
     box.appendChild(body);
   }
 
