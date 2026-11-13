@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  var LS_KEY = 'c-variablentypen-fortschritt-v2';
+  var LS_KEY = 'c-variablentypen-fortschritt-v3';
   var state = { solved: {} };     // taskId -> true (im 1. Versuch) / false
   var main, cheatPanel, cheatBtn;
 
@@ -229,7 +229,6 @@
   function range(name) {
     var t = TYPE_INFO[name];
     if (!t) return null;
-    if (t.kind !== 'ganz') return null;
     var bits = BigInt(t.bytes * 8);
     if (t.vz) return { min: -(1n << (bits - 1n)), max: (1n << (bits - 1n)) - 1n };
     return { min: 0n, max: (1n << bits) - 1n };
@@ -249,9 +248,11 @@
   /* ---------- Syntax-Highlighting ---------- */
   var KW = {}, TY = {};
   'if else for while do return sizeof struct const static void break continue switch case default typedef'.split(' ').forEach(function (w) { KW[w] = 1; });
-  /* 'int' nur fuer `int main(void)`, 'float'/'double' nur fuer die typedef-Zeile in Level 5 */
-  'int float double size_t int8_t uint8_t int16_t uint16_t int32_t uint32_t int64_t uint64_t float32_t float64_t'.split(' ').forEach(function (w) { TY[w] = 1; });
-  var PRI_MACRO = /^(PRI|SCN)[diouxX](8|16|32|64)$/;
+  /* 'int' nur fuer `int main(void)` */
+  'int size_t int8_t uint8_t int16_t uint16_t int32_t uint32_t int64_t uint64_t'.split(' ').forEach(function (w) { TY[w] = 1; });
+  /* AVR-Register (ATmega2560) und Bitnamen in Registern */
+  var REG = /^(?:(?:DDR|PORT|PIN)[A-L]|TCNT[0-5][HL]?|OCR[0-5][ABC]?[HL]?|TCCR[0-5][ABC]?|TIMSK[0-5]|TIFR[0-5]|ICR[1345][HL]?|ADC[HLW]?|ADMUX|ADCSR[AB]|DIDR[0-2]|SREG|EEAR[HL]?|EEDR|EECR|UDR[0-3]|UCSR[0-3][ABC]|UBRR[0-3][HL]?)$/;
+  var REG_BIT = /^(?:REFS[01]|ADLAR|MUX[0-5]|ADEN|ADSC|ADATE|ADIF|ADIE|ADPS[0-2]|CS[0-5][0-2]|WGM[0-5][0-3]|COM[0-5][ABC][01]|TOIE[0-5]|OCIE[0-5][ABC]|TOV[0-5]|OCF[0-5][ABC]|F_CPU)$/;
   var TOKEN = /(\/\/.*$)|(\/\*.*?\*\/)|("(?:\\.|[^"\\])*")|('(?:\\.|[^'\\])*')|(____)|(\b0[xX][0-9a-fA-F]+\b|\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[fFuUlL]*)|([A-Za-z_]\w*)/g;
 
   function highlightLine(line) {
@@ -265,8 +266,8 @@
       if (m[1] || m[2]) cls = 'tok-com';
       else if (m[3] || m[4]) cls = 'tok-str';
       else if (m[5]) cls = 'tok-blank';
-      else if (m[6]) cls = 'tok-num';
-      else if (m[7]) cls = TY[txt] ? 'tok-type' : PRI_MACRO.test(txt) ? 'tok-pre' : (KW[txt] ? 'tok-kw' : (line.charAt(TOKEN.lastIndex) === '(' ? 'tok-fn' : null));
+      else if (m[6]) cls = /^0[xX]/.test(txt) ? 'tok-hex' : 'tok-num';
+      else if (m[7]) cls = TY[txt] ? 'tok-type' : REG.test(txt) ? 'tok-reg' : REG_BIT.test(txt) ? 'tok-pre' : (KW[txt] ? 'tok-kw' : (line.charAt(TOKEN.lastIndex) === '(' ? 'tok-fn' : null));
       frag.appendChild(cls ? el('span', { class: cls }, txt) : document.createTextNode(txt));
       last = TOKEN.lastIndex;
     }
@@ -348,13 +349,12 @@
     var tbody = el('tbody');
     CHEAT_ROWS.forEach(function (r) {
       var info = TYPE_INFO[r.type], rg = range(r.type);
-      var rangeText = r.rangeText || (rg ? fmt(rg.min) + ' bis ' + fmt(rg.max) : '');
       tbody.appendChild(el('tr', null, [
-        el('th', { scope: 'row' }, [el('code', null, r.type), r.star ? ' *' : null]),
+        el('th', { scope: 'row' }, el('code', null, r.type)),
         el('td', null, String(info.bytes)),
         el('td', null, String(info.bytes * 8)),
-        el('td', null, [rangeText, r.note ? el('small', null, ' (' + r.note + ')') : null]),
-        el('td', null, el('code', null, r.fmt))
+        el('td', null, fmt(rg.min) + ' bis ' + fmt(rg.max)),
+        el('td', null, rich(r.use))
       ]));
     });
     add(cheatPanel, [
@@ -362,13 +362,14 @@
         el('h2', { id: 'cheat-title' }, 'Spickzettel'),
         el('button', { type: 'button', class: 'btn ghost', onclick: function () { toggleCheat(false); } }, 'Schliessen')
       ]),
-      el('p', null, rich('Alle Typen haben auf jeder Plattform genau dieselbe Grösse. Ganzzahltypen: `#include <stdint.h>`. Für die PRI…-Makros: `#include <inttypes.h>`, Verwendung z.B. `printf("%" PRIu8 "\\n", x);`.')),
+      el('p', null, rich('Plattform: ATmega2560 (Arduino Mega 2560, avr-gcc) – 8 KB SRAM, 256 KB Flash, keine FPU. Register: `#include <avr/io.h>`, Typen: `#include <stdint.h>`. Achtung: `int` ist hier nur 16 Bit.')),
       el('div', { class: 'table-wrap' }, el('table', null, [
-        el('thead', null, el('tr', null, [el('th', null, 'Typ'), el('th', null, 'Bytes'), el('th', null, 'Bits'), el('th', null, 'Wertebereich'), el('th', null, 'printf')])),
+        el('thead', null, el('tr', null, [el('th', null, 'Typ'), el('th', null, 'Bytes'), el('th', null, 'Bits'), el('th', null, 'Wertebereich'), el('th', null, 'Typisch am ATmega')])),
         tbody
       ])),
-      el('p', { class: 'small' }, rich('Formeln: ohne Vorzeichen (`uintN_t`): 0 … 2ⁿ − 1, mit Vorzeichen (`intN_t`): −2ⁿ⁻¹ … 2ⁿ⁻¹ − 1. `sizeof` ausgeben mit `%zu`.')),
-      el('p', { class: 'small' }, rich('* `float32_t` und `float64_t` stehen nicht in `<stdint.h>`. Viele Embedded-Projekte und Coding-Standards (z.B. MISRA, ARM CMSIS) stellen sie per typedef in einer eigenen Header-Datei bereit – hier `#include "types.h"` (Details in der Info zu Level 5). Ausgabe für beide mit `%f`.'))
+      el('p', { class: 'small' }, rich('Formeln: ohne Vorzeichen (`uintN_t`): 0 … 2ⁿ − 1, mit Vorzeichen (`intN_t`): −2ⁿ⁻¹ … 2ⁿ⁻¹ − 1.')),
+      el('p', { class: 'small' }, rich('Ports: LEDs an `PORTA`/`PORTB` (`DDRA = 0xFF;`), Taster an Port L (`uint8_t taster = PINL;`), Schalter an Port C (`PINC`). 16 Bit auf LEDs: `PORTA = wert >> 8; PORTB = wert & 0xFF;`')),
+      el('p', { class: 'small' }, rich('Festkomma: Wert × Faktor (10, 100, 1000) als Ganzzahl, z.B. 3.84 km → 3840 m → `uint16_t`. Typ nach dem skalierten Bereich wählen. `sizeof(struct)` = Summe der Felder (kein Padding auf dem AVR).'))
     ]);
   }
   function toggleCheat(show) {
@@ -396,10 +397,10 @@
     for (var ci = 0; ci < LEVELS.length; ci++) if (unlocked(ci) && !levelDone(ci)) { current = ci; break; }
     main.appendChild(el('section', { class: 'hero hero-home' }, [
       el('div', { class: 'hero-text' }, [
-        el('div', { class: 'eyebrow sticker' }, 'C-Variablentypen · 9 Levels'),
+        el('div', { class: 'eyebrow sticker' }, 'C-Typen auf dem ATmega2560 · 9 Levels'),
         el('h1', null, ['Welcher Typ ', el('span', { class: 'mark' }, 'passt'), '?']),
         el('p', { class: 'lead' }, t.done === 0
-          ? 'Lerne Schritt für Schritt, welcher Typ wie viel Speicher braucht, welche Werte hineinpassen – und wie man den passenden wählt. Starte mit Level 1!'
+          ? 'Lerne Schritt für Schritt am Arduino Mega 2560, welcher Typ wie viel Speicher braucht, welche Werte hineinpassen, wie Kommazahlen als Festkomma funktionieren – und wie man den passenden Typ wählt. Starte mit Level 1!'
           : (t.done === t.all ? 'Alles geschafft! Du kannst jedes Level beliebig wiederholen.' : 'Mach dort weiter, wo du aufgehört hast – die markierte Station wartet.'))
       ]),
       mascot(t.done === t.all ? 'party' : 'neutral', t.done === 0 ? pickNew('home', BIT_SAYS.home) : (t.done === t.all ? BIT_SAYS.allDone : pickNew('back', BIT_SAYS.back)), 'hero-bit')
@@ -697,7 +698,7 @@
       el('div', { class: 'eyebrow' }, 'Abschlussprüfung bestanden'),
       el('h1', null, 'Herzlichen Glückwunsch!'),
       el('p', { class: 'big' }, 'Du hast ' + ef + ' von ' + LEVELS[exam].tasks.length + ' Prüfungsaufgaben im ersten Versuch richtig gelöst – insgesamt ' + allFirst + ' von ' + all + ' Aufgaben.'),
-      el('p', null, 'Du weisst jetzt, warum man Typen mit fester Grösse verwendet, wie gross sie sind, welche Werte hineinpassen, wie Bits und Zweierkomplement funktionieren, wann float32_t reicht, wie man sparsam Typen wählt, typische Typ-Fehler erkennt und structs ohne verschwendetes Padding baut. Das ist eine richtig solide Grundlage!'),
+      el('p', null, 'Du weisst jetzt, warum man Typen mit fester Grösse verwendet, wie gross sie sind, welche Werte hineinpassen, wie Bits, LEDs und Zweierkomplement zusammenhängen, wie du Kommazahlen als Festkomma speicherst, wie man sparsam Typen wählt, typische Typ-Fehler auf dem ATmega2560 erkennt und structs ins 8-KB-SRAM einpasst. Das ist eine richtig solide Grundlage!'),
       list,
       el('div', { class: 'actions' }, [
         el('button', { type: 'button', class: 'btn', onclick: showPlayground }, 'Zur Spielwiese'),
@@ -765,7 +766,7 @@
       setTimeout(function () { input.focus(); }, 0);
     },
     bits: function (t, ctx, box) {
-      var w = bitWidget(t.bits, t.mode === 'mitVZ' ? 'mitVZ' : 'ohneVZ');
+      var w = bitWidget(t.bits, t.mode === 'mitVZ' ? 'mitVZ' : 'ohneVZ', { leds: !!t.leds });
       box.appendChild(w.node);
       box.appendChild(el('div', { class: 'actions left' }, [
         el('button', { type: 'button', class: 'btn', onclick: function () {
@@ -780,12 +781,43 @@
     },
     pickType: renderPickType,
     findBug: renderFindBug,
-    structOrder: renderStruct
+    structFit: renderStructFit
   };
 
+  /* 8 LEDs eines Ports (links LED 7, rechts LED 0) */
+  function ledStrip(label) {
+    var leds = [], row = el('div', { class: 'leds', 'aria-hidden': 'true' });
+    for (var i = 7; i >= 0; i--) {
+      var l = el('span', { class: 'led' });
+      leds.push(l);
+      row.appendChild(el('span', { class: 'led-cell' }, [l, el('span', { class: 'led-no' }, String(i))]));
+    }
+    var out = el('output', { class: 'led-val' });
+    var node = el('div', { class: 'led-strip' }, [el('span', { class: 'led-label' }, label), row, out]);
+    return {
+      node: node,
+      set: function (v) {
+        var b = Number(wrap(BigInt(v), 8, false));
+        leds.forEach(function (l, k) { l.classList.toggle('on', !!(b & (1 << (7 - k)))); });
+        var on = [];
+        for (var i = 7; i >= 0; i--) if (b & (1 << i)) on.push(i);
+        var h = b.toString(16).toUpperCase();
+        out.textContent = '= ' + b + ' (0x' + (h.length < 2 ? '0' : '') + h + ')';
+        node.setAttribute('aria-label', label + ' = ' + b + ': ' + (on.length ? 'LED ' + on.join(', ') + ' leuchten' : 'alle LEDs aus'));
+      }
+    };
+  }
+
   /* Bit-Umschalter */
-  function bitWidget(n, emphasis) {
+  function bitWidget(n, emphasis, opts) {
+    opts = opts || {};
     var bits = [], locked = false;
+    var strips = [];
+    if (opts.leds) {
+      if (n === 8) strips.push({ s: ledStrip('LEDs an PORTA'), shift: 0n });
+      else { strips.push({ s: ledStrip('PORTA (High-Byte)'), shift: 8n }); strips.push({ s: ledStrip('PORTB (Low-Byte)'), shift: 0n }); }
+      strips.forEach(function (x) { x.s.node.setAttribute('role', 'img'); });
+    }
     for (var i = 0; i < n; i++) bits.push(0);
     var row = el('div', { class: 'bits', role: 'group', 'aria-label': n + ' Bits, links das höchstwertige' });
     var outU = el('output'), outS = el('output'), outH = el('output');
@@ -803,6 +835,8 @@
       var h = val().toString(16).toUpperCase();
       while (h.length < n / 4) h = '0' + h;
       outH.textContent = '0x' + h;
+      var u = val();
+      strips.forEach(function (x) { x.s.set((u >> x.shift) & 0xFFn); });
     }
     for (var k = 0; k < n; k++) {
       (function (idx) {
@@ -817,6 +851,7 @@
     }
     var node = el('div', { class: 'bit-widget' }, [
       row,
+      strips.length ? el('div', { class: 'led-box' }, strips.map(function (x) { return x.s.node; })) : null,
       el('div', { class: 'bit-values' }, [
         el('div', { class: emphasis === 'ohneVZ' ? 'em' : '' }, [el('span', null, 'ohne Vorzeichen (uint' + n + '_t): '), outU]),
         el('div', { class: emphasis === 'mitVZ' ? 'em' : '' }, [el('span', null, 'mit Vorzeichen (int' + n + '_t): '), outS]),
@@ -838,28 +873,42 @@
 
   /* Typ waehlen */
   function evalType(t, name) {
-    var info = TYPE_INFO[name];
     if (t.notes && t.notes[name] && !fitsBasic(t, name).ok) return { ok: false, msg: t.notes[name] };
-    return fitsBasic(t, name, info);
+    return fitsBasic(t, name);
   }
+  /* Dezimaltext exakt skalieren: scaleDec('3.84', 1000) -> 3840n (Faktor = Zehnerpotenz) */
+  function scaleDec(s, factor) {
+    s = String(s).replace(/^−/, '-');
+    var neg = s.charAt(0) === '-';
+    if (neg || s.charAt(0) === '+') s = s.slice(1);
+    var p = s.split('.'), digits = String(factor).length - 1, frac = p[1] || '';
+    while (frac.length < digits) frac += '0';
+    var v = BigInt((p[0] || '0') + frac.slice(0, digits));
+    return neg ? -v : v;
+  }
+  /* Passt der (gespeicherte, ggf. skalierte) Bereich t.min..t.max in den Typ? */
   function fitsBasic(t, name) {
     var info = TYPE_INFO[name];
     var min = BigInt(t.min), max = BigInt(t.max);
-    if (info.kind === 'komma') {
-      if (!t.decimals) return { ok: false, msg: 'Für ganze Zahlen ist ein Kommazahltyp ungeeignet: ungenau bei grossen Werten und unnötig. Nimm einen Ganzzahltyp.' };
-      if ((t.digits || 0) > info.digits) return { ok: false, msg: '`' + name + '` schafft nur ca. ' + info.digits + '–' + (info.digits + 1) + ' signifikante Stellen (sicher ' + info.digits + ') – zu ungenau für ' + t.digits + ' Stellen.' };
-      return { ok: true };
-    }
-    if (t.decimals) {
-      var s = t.sample || '1.5';
-      return { ok: false, msg: '`' + name + '` speichert nur ganze Zahlen – die Nachkommastellen gehen verloren: aus ' + s + ' würde ' + s.split('.')[0] + '.' };
-    }
     var r = range(name);
+    if (min < r.min) {
+      if (r.min === 0n) return { ok: false, msg: '`' + name + '` hat kein Vorzeichen und kann keine negativen Werte speichern. Aus ' + fmt(min) + ' würde ' + fmt(wrap(min, info.bytes * 8, false)) + '.' };
+    }
     if (min < r.min || max > r.max) {
       var bad = min < r.min ? min : max;
-      var bits = info.bytes * 8;
-      var became = wrap(bad, bits, info.vz);
-      return { ok: false, msg: '`' + name + '` reicht nur von ' + fmt(r.min) + ' bis ' + fmt(r.max) + '. Der Wert ' + fmt(bad) + ' passt nicht hinein – gespeichert würde ' + fmt(became) + '.' };
+      var became = wrap(bad, info.bytes * 8, info.vz);
+      var msg = '`' + name + '` reicht nur von ' + fmt(r.min) + ' bis ' + fmt(r.max) + '. Der Wert ' + fmt(bad) + ' passt nicht hinein – gespeichert würde ' + fmt(became) + '.';
+      if (t.scale) {
+        var realBad = t.real ? (bad === max ? t.real.max : t.real.min) : null;
+        var realInt = realBad != null ? scaleDec(realBad, 1) : null;
+        if (realInt !== null && realInt >= r.min && realInt <= r.max) {
+          var smp = t.sample || realBad;
+          msg += ' Denkfehler: ' + smp + ' sieht klein aus, aber gespeichert wird ' + fmt(scaleDec(smp, t.scale)) + ' (× ' + t.scale + ').';
+        } else {
+          msg += ' Denk dran: Entscheidend ist der skalierte Wert (× ' + t.scale + ').';
+        }
+      }
+      return { ok: false, msg: msg };
     }
     return { ok: true };
   }
@@ -868,7 +917,9 @@
     var code = codeBlock(t.code);
     box.appendChild(code);
     var blank = code.querySelector('.tok-blank');
-    box.appendChild(el('p', { class: 'range-note' }, 'Benötigter Bereich: ' + fmt(BigInt(t.min)) + ' bis ' + fmt(BigInt(t.max)) + (t.decimals ? ', mit Nachkommastellen' : ', nur ganze Zahlen')));
+    box.appendChild(el('p', { class: 'range-note' }, t.scale && t.real
+      ? 'Bereich: ' + t.real.min + ' bis ' + t.real.max + (t.unit ? ' ' + t.unit : '') + ' → × ' + t.scale + ' → gespeichert wird ' + fmt(BigInt(t.min)) + ' bis ' + fmt(BigInt(t.max)) + ' (Ganzzahl)'
+      : 'Benötigter Bereich: ' + fmt(BigInt(t.min)) + ' bis ' + fmt(BigInt(t.max)) + ', nur ganze Zahlen'));
     var fitting = t.options.filter(function (o) { return evalType(t, o).ok; });
     var best = Math.min.apply(null, fitting.map(function (o) { return TYPE_INFO[o].bytes; }));
     var chips = el('div', { class: 'chips', role: 'group', 'aria-label': 'Typ auswählen' });
@@ -927,89 +978,74 @@
     });
   }
 
-  /* Structs */
-  function structLayout(fields) {
-    var off = 0, maxA = 1, cells = [], offsets = [];
-    fields.forEach(function (f, fi) {
-      var s = TYPE_INFO[f.type].bytes;
-      maxA = Math.max(maxA, s);
-      while (off % s) { cells.push(-1); off++; }
-      offsets.push(off);
-      for (var k = 0; k < s; k++) cells.push(fi);
-      off += s;
-    });
-    while (off % maxA) { cells.push(-1); off++; }
-    return { size: off, cells: cells, offsets: offsets, align: maxA };
+  /* Structs & RAM-Budget (ATmega2560/avr-gcc: kein Padding, sizeof = Summe der Felder) */
+  function smallestBytes(f) {
+    var best = Infinity;
+    PLAY_TYPES.forEach(function (n) { if (fitsBasic(f, n).ok) best = Math.min(best, TYPE_INFO[n].bytes); });
+    return best;
   }
-  function renderStruct(t, ctx, box) {
-    var order = t.fields.slice();
-    var sorted = t.fields.slice().sort(function (a, b) { return TYPE_INFO[b.type].bytes - TYPE_INFO[a.type].bytes; });
-    var optimal = structLayout(sorted).size;
-    var startSize = structLayout(order).size;
+  function renderStructFit(t, ctx, box) {
+    var types = t.fields.map(function (f) { return f.start; });
+    var optimum = t.fields.reduce(function (s, f) { return s + smallestBytes(f); }, 0);
+    var startSize = types.reduce(function (s, n) { return s + TYPE_INFO[n].bytes; }, 0);
     var codeWrap = el('div');
     var list = el('ol', { class: 'fields' });
-    var mem = el('div', { class: 'mem', 'aria-hidden': 'true' });
+    var ramFill = el('span', { class: 'ram-fill' });
+    var ramBar = el('div', { class: 'ram-bar', 'aria-hidden': 'true' }, ramFill);
     var sizeOut = el('p', { class: 'size-out', 'aria-live': 'polite' });
-    var colorIdx = {};
-    t.fields.forEach(function (f, i) { colorIdx[f.name] = i; });
-    var locked = false;
+    var selects = [], locked = false;
+    function size() { return types.reduce(function (s, n) { return s + TYPE_INFO[n].bytes; }, 0); }
 
-    function draw(focusName, focusDir) {
-      var lay = structLayout(order);
+    function draw() {
+      var s = size(), total = s * t.count;
       clear(codeWrap);
       var lines = ['struct ' + t.name + ' {'];
-      order.forEach(function (f, i) { lines.push('    ' + f.type + ' ' + f.name + ';  // Offset ' + lay.offsets[i]); });
-      lines.push('};  // sizeof = ' + lay.size);
+      t.fields.forEach(function (f, i) { lines.push('    ' + types[i] + ' ' + f.name + ';  // ' + TYPE_INFO[types[i]].bytes + ' Byte'); });
+      lines.push('};  // sizeof = ' + s + ' (keine Füllbytes)');
+      lines.push('struct ' + t.name + ' daten[' + t.count + '];  // ' + t.count + ' * ' + s + ' = ' + total + ' Bytes');
       codeWrap.appendChild(codeBlock(lines, { title: 'struct.c' }));
-
-      clear(list);
-      order.forEach(function (f, i) {
-        var up = el('button', { type: 'button', class: 'mini', 'aria-label': f.name + ' nach oben', disabled: i === 0 || locked }, '▲');
-        var down = el('button', { type: 'button', class: 'mini', 'aria-label': f.name + ' nach unten', disabled: i === order.length - 1 || locked }, '▼');
-        up.addEventListener('click', function () { move(i, -1); });
-        down.addEventListener('click', function () { move(i, 1); });
-        list.appendChild(el('li', { class: 'field c' + colorIdx[f.name] }, [
-          el('span', { class: 'swatch' }),
-          el('code', null, f.type + ' ' + f.name),
-          el('small', null, TYPE_INFO[f.type].bytes + ' B'),
-          el('span', { class: 'mini-group' }, [up, down])
-        ]));
-        if (focusName === f.name) setTimeout(function () { var b = focusDir < 0 ? up : down; (b.disabled ? (focusDir < 0 ? down : up) : b).focus(); }, 0);
-      });
-
-      clear(mem);
-      var padCount = 0;
-      for (var r = 0; r < lay.cells.length; r += 8) {
-        var row = el('div', { class: 'mem-row' }, el('span', { class: 'mem-off' }, String(r)));
-        for (var c = r; c < r + 8 && c < lay.cells.length; c++) {
-          var fi = lay.cells[c];
-          if (fi < 0) padCount++;
-          row.appendChild(el('span', { class: 'byte ' + (fi < 0 ? 'pad' : 'c' + colorIdx[order[fi].name]), title: fi < 0 ? 'Padding' : order[fi].name }, fi < 0 ? '·' : ''));
-        }
-        mem.appendChild(row);
-      }
-      sizeOut.textContent = 'sizeof(struct ' + t.name + ') = ' + lay.size + ' Bytes, davon ' + padCount + ' Füllbytes (Padding). Ausgangslage: ' + startSize + ' Bytes.';
+      var pct = Math.min(100, total / t.budget * 100);
+      ramFill.style.width = pct.toFixed(1) + '%';
+      ramBar.classList.toggle('over', total > t.budget);
+      sizeOut.textContent = 'sizeof(struct ' + t.name + ') = ' + s + ' Bytes → ' + t.count + ' × ' + s + ' = ' + fmt(BigInt(total)) + ' von ' + fmt(BigInt(t.budget)) + ' freien Bytes SRAM' +
+        (total > t.budget ? ' – passt nicht!' : ' – passt.') + ' Ausgangslage: ' + fmt(BigInt(startSize * t.count)) + ' Bytes.';
     }
-    function move(i, d) {
-      if (locked) return;
-      var j = i + d;
-      if (j < 0 || j >= order.length) return;
-      var tmp = order[i]; order[i] = order[j]; order[j] = tmp;
-      draw(order[j].name, d);
-    }
+    t.fields.forEach(function (f, i) {
+      var sel = el('select', { 'aria-label': 'Typ für ' + f.name });
+      PLAY_TYPES.forEach(function (n) { sel.appendChild(el('option', { value: n, selected: n === types[i] }, n + ' (' + TYPE_INFO[n].bytes + ' B)')); });
+      sel.value = types[i];
+      sel.addEventListener('change', function () { if (locked) return; types[i] = sel.value; draw(); });
+      selects.push(sel);
+      list.appendChild(el('li', { class: 'field fit c' + (i % 6) }, [
+        el('span', { class: 'swatch' }),
+        el('span', { class: 'fit-name' }, [el('code', null, f.name), el('small', null, f.desc)]),
+        sel
+      ]));
+    });
     add(box, [
-      el('div', { class: 'struct-grid' }, [
-        el('div', null, [el('h3', null, 'Felder (umsortieren)'), list]),
-        el('div', null, [el('h3', null, 'Speicher-Layout (8 Bytes pro Zeile)'), mem,
-          el('div', { class: 'legend' }, [el('span', { class: 'byte pad' }, '·'), ' = Füllbyte (Padding)'])])
-      ]),
+      el('h3', { class: 'fit-head' }, 'Felder (Typ wählen)'),
+      list,
+      el('div', { class: 'ram' }, [el('span', { class: 'ram-label' }, 'SRAM-Budget'), ramBar]),
       sizeOut,
       codeWrap,
       el('div', { class: 'actions left' }, el('button', { type: 'button', class: 'btn', onclick: function () {
         if (ctx.isFinished()) return;
-        var s = structLayout(order).size;
-        if (s === optimal) { locked = true; draw(); ctx.right('Mit ' + s + ' Bytes hast du das Minimum erreicht.'); }
-        else ctx.wrong('Aktuell ' + s + ' Bytes – es geht mit ' + optimal + ' Bytes. Tipp: Sortiere nach Grösse, die grössten Felder zuerst.');
+        var tooSmall = [], wasteful = [];
+        t.fields.forEach(function (f, i) {
+          var r = fitsBasic(f, types[i]);
+          if (!r.ok) tooSmall.push('`' + f.name + '`: ' + r.msg);
+          else if (TYPE_INFO[types[i]].bytes > smallestBytes(f)) wasteful.push('`' + f.name + '`');
+        });
+        var s = size(), total = s * t.count;
+        if (tooSmall.length) { ctx.wrong(tooSmall[0] + (tooSmall.length > 1 ? ' (Und ' + (tooSmall.length - 1) + ' weitere Felder sind zu klein.)' : ''), 'Zu klein!'); return; }
+        if (wasteful.length) {
+          ctx.wrong('Alle Werte passen' + (total > t.budget ? ', aber das Array ist mit ' + total + ' Bytes zu gross für ' + t.budget + ' Bytes.' : ' und das Array passt in den RAM.') +
+            ' Noch zu gross gewählt: ' + wasteful.join(', ') + '. Es geht mit ' + optimum + ' Bytes pro Datensatz.', 'Funktioniert – aber nicht optimal.');
+          return;
+        }
+        locked = true;
+        selects.forEach(function (x) { x.disabled = true; });
+        ctx.right('sizeof = ' + s + ' Bytes, ' + t.count + ' Datensätze = ' + total + ' Bytes – passt in die ' + t.budget + ' freien Bytes.');
       } }, 'Prüfen'))
     ]);
     draw();
@@ -1029,7 +1065,10 @@
     var widgetBox = el('div');
     var info = el('p', { class: 'range-note' });
     var log = el('div', { class: 'feedback info', 'aria-live': 'polite' });
+    var pgLeds = ledStrip('PORTA = Low-Byte');
+    pgLeds.node.setAttribute('role', 'img');
     var w;
+    function showLeds() { pgLeds.set(wrap(cur.v, 8, false)); }
 
     function bitsOf() { return TYPE_INFO[cur.type].bytes * 8; }
     function rebuild() {
@@ -1041,6 +1080,7 @@
         if (e.target && e.target.classList && e.target.classList.contains('bit')) {
           cur.v = TYPE_INFO[cur.type].vz ? w.signedValue() : w.unsignedValue();
           input.value = cur.v.toString();
+          showLeds();
         }
       });
       var r = range(cur.type);
@@ -1067,6 +1107,7 @@
       cur.v = nv;
       input.value = nv.toString();
       w.set(nv);
+      showLeds();
     }
     function op(d) { setValue(cur.v + d, fmt(cur.v) + (d < 0n ? ' − ' + fmt(-d) : ' + ' + fmt(d))); }
 
@@ -1085,7 +1126,7 @@
         el('div', { class: 'hero-text' }, [
           el('div', { class: 'eyebrow sticker' }, 'Spielwiese'),
           el('h1', null, ['Overflow-', el('span', { class: 'mark' }, 'Simulator')]),
-          el('p', { class: 'lead' }, 'Wähle einen Typ, gib einen Wert ein und schau, was bei +1 über dem Maximum oder −1 unter dem Minimum passiert. Du kannst auch direkt die Bits anklicken.')
+          el('p', { class: 'lead' }, 'Wähle einen Typ, gib einen Wert ein und schau, was bei +1 über dem Maximum oder −1 unter dem Minimum passiert. Du kannst auch direkt die Bits anklicken. Darunter siehst du, was 8 LEDs an PORTA zeigen würden.')
         ]),
         mascot('happy', BIT_SAYS.play, 'hero-bit')
       ]),
@@ -1100,6 +1141,7 @@
           b('0', function () { setValue(0n, null); })
         ]),
         widgetBox,
+        el('div', { class: 'led-box' }, [pgLeds.node, el('p', { class: 'small' }, rich('So sähe `PORTA = wert;` aus: Der Port übernimmt nur die unteren 8 Bit (Wert mod 256).'))]),
         log
       ])
     ]);

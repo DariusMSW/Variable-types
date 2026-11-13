@@ -546,3 +546,30 @@ button { font: inherit; color: inherit; }
   .bit-cell.byte-start { margin-left: .25rem; }
   .byte { width: 1.6rem; height: 1.6rem; }
 }
+
+/* AVR-Register und Hex-Zahlen */
+.tok-reg { color: #FF9EDB; font-weight: 700; }
+.tok-hex { color: #FFD27A; font-weight: 700; }
+
+/* LEDs an einem Port */
+.led-box { display: grid; gap: .5rem; margin-top: .9rem; }
+.led-strip { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; font-family: var(--mono); }
+.led-label { font-weight: 800; font-size: .85rem; min-width: 10.5em; color: var(--muted); }
+.leds { display: flex; gap: .3rem; }
+.led-cell { display: flex; flex-direction: column; align-items: center; gap: .1rem; }
+.led { width: 1.35rem; height: 1.35rem; border-radius: 50%; border: 2px solid var(--line); background: #5A1E1A; }
+.led.on { background: #FF3B2F; box-shadow: 0 0 10px 2px rgba(255, 59, 47, .65); }
+.led-no { font: 700 .65rem var(--mono); color: var(--muted); }
+.led-val { font-weight: 800; color: var(--ink); }
+
+/* Structs & RAM-Budget */
+.fit-head { font: 800 .75rem/1.3 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.field.fit { flex-wrap: wrap; }
+.fit-name { flex: 1; min-width: 12rem; display: flex; flex-direction: column; }
+.fit-name small { font-family: inherit; font-weight: 600; color: var(--muted); }
+.field.fit select { min-height: 44px; font: 700 .95rem var(--mono); padding: .3em .5em; border-radius: var(--r); border: 2px solid var(--line); background: var(--card-2); color: var(--ink); }
+.ram { display: flex; align-items: center; gap: .8rem; margin: 1rem 0 .3rem; }
+.ram-label { font: 800 .75rem system-ui, sans-serif; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.ram-bar { flex: 1; height: 1.4rem; border: var(--bw) solid var(--line); border-radius: var(--r); background: var(--card-2); overflow: hidden; }
+.ram-fill { display: block; height: 100%; background: var(--teal); transition: width .2s; }
+.ram-bar.over .ram-fill { background: var(--coral); }
