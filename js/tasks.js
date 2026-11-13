@@ -932,3 +932,247 @@ var BIT_POKE = [
   'Psst: Taster liest man über `PINL`, nicht über `PORTL`. Mein Lieblingsfakt.',
   '8 KB SRAM – klingt wenig, reicht aber, wenn man die Typen klug wählt.'
 ];
+
+/* ---------- Simulator: Beispielprogramme (Daten fuer js/sim.js) ---------- */
+var SIM_EXAMPLES = [
+  {
+    title: 'LEDs einschalten',
+    text: 'Das kleinste Programm: `DDRA = 0xFF;` macht alle 8 Pins von Port A zu Ausgängen, dann legt `PORTA` fest, welche LEDs leuchten. Probier andere Muster, z.B. `0b11110000` – oder lösch die DDRA-Zeile und schau, was passiert.',
+    code: [
+      '#include <avr/io.h>',
+      '#include <stdint.h>',
+      '',
+      'int main(void)',
+      '{',
+      '    DDRA = 0xFF;          // alle 8 Pins von Port A als Ausgang',
+      '    PORTA = 0b10101010;   // jede zweite LED an',
+      '',
+      '    while (1)',
+      '    {',
+      '        // nichts mehr zu tun – die LEDs bleiben an',
+      '    }',
+      '}'
+    ].join('\n')
+  },
+  {
+    title: 'Binärzähler auf PORTA',
+    text: 'Ein `uint8_t` zählt hoch und wird binär auf den LEDs angezeigt. Nach 255 kommt wieder 0 – der Überlauf ist bei Typen ohne Vorzeichen genau festgelegt.',
+    code: [
+      '#define F_CPU 16000000UL',
+      '#include <avr/io.h>',
+      '#include <util/delay.h>',
+      '#include <stdint.h>',
+      '',
+      'int main(void)',
+      '{',
+      '    DDRA = 0xFF;',
+      '    uint8_t zaehler = 0;',
+      '',
+      '    while (1)',
+      '    {',
+      '        PORTA = zaehler;   // Zählerstand binär auf den LEDs',
+      '        zaehler++;         // nach 255 kommt wieder 0',
+      '        _delay_ms(200);',
+      '    }',
+      '}'
+    ].join('\n')
+  },
+  {
+    title: 'Lauflicht',
+    text: 'Ein einzelnes Bit wird mit `<< 1` nach links geschoben. Wenn es aus dem `uint8_t` herausfällt, ist das Muster 0 – dann geht es wieder bei LED 0 los.',
+    code: [
+      '#define F_CPU 16000000UL',
+      '#include <avr/io.h>',
+      '#include <util/delay.h>',
+      '#include <stdint.h>',
+      '',
+      'int main(void)',
+      '{',
+      '    DDRA = 0xFF;',
+      '    uint8_t muster = 0x01;',
+      '',
+      '    while (1)',
+      '    {',
+      '        PORTA = muster;',
+      '        _delay_ms(150);',
+      '        muster = muster << 1;   // eine Stelle nach links',
+      '        if (muster == 0)',
+      '        {',
+      '            muster = 0x01;      // wieder bei LED 0 anfangen',
+      '        }',
+      '    }',
+      '}'
+    ].join('\n')
+  },
+  {
+    title: 'Taster schaltet LEDs',
+    text: 'Halte Taster L0 gedrückt: Solange `PINL` Bit 0 = 1 ist, leuchten alle LEDs an PORTA. Eingänge liest man über `PINL`, nicht über `PORTL`.',
+    code: [
+      '#include <avr/io.h>',
+      '#include <stdint.h>',
+      '',
+      'int main(void)',
+      '{',
+      '    DDRA = 0xFF;   // LEDs: Ausgang',
+      '    DDRL = 0x00;   // Taster: Eingang',
+      '',
+      '    while (1)',
+      '    {',
+      '        if (PINL & (1 << PL0))   // Taster L0 gedrückt?',
+      '        {',
+      '            PORTA = 0xFF;',
+      '        }',
+      '        else',
+      '        {',
+      '            PORTA = 0x00;',
+      '        }',
+      '    }',
+      '}'
+    ].join('\n')
+  },
+  {
+    title: 'Schalter → LEDs spiegeln',
+    text: 'Die 8 Schalter an Port C werden gelesen und 1:1 auf PORTB ausgegeben. Leg ein paar Schalter um!',
+    code: [
+      '#define F_CPU 16000000UL',
+      '#include <avr/io.h>',
+      '#include <util/delay.h>',
+      '#include <stdint.h>',
+      '',
+      'int main(void)',
+      '{',
+      '    DDRB = 0xFF;   // LEDs an Port B: Ausgang',
+      '    DDRC = 0x00;   // Schalter an Port C: Eingang',
+      '',
+      '    while (1)',
+      '    {',
+      '        uint8_t schalter = PINC;',
+      '        PORTB = schalter;',
+      '        _delay_ms(10);',
+      '    }',
+      '}'
+    ].join('\n')
+  },
+  {
+    title: '16-Bit-Zähler auf zwei Ports',
+    text: 'Ein `uint16_t` ist zu gross für 8 LEDs. Darum kommt das High-Byte (`>> 8`) auf PORTA und das Low-Byte (`& 0xFF`) auf PORTB.',
+    code: [
+      '#define F_CPU 16000000UL',
+      '#include <avr/io.h>',
+      '#include <util/delay.h>',
+      '#include <stdint.h>',
+      '',
+      'int main(void)',
+      '{',
+      '    DDRA = 0xFF;',
+      '    DDRB = 0xFF;',
+      '    uint16_t zaehler = 0;',
+      '',
+      '    while (1)',
+      '    {',
+      '        PORTA = zaehler >> 8;     // High-Byte',
+      '        PORTB = zaehler & 0xFF;   // Low-Byte',
+      '        zaehler += 37;',
+      '        _delay_ms(50);',
+      '    }',
+      '}'
+    ].join('\n')
+  },
+  {
+    title: 'Overflow-Demo: uint8_t läuft über',
+    text: 'Der Wert startet bei 250. Schau in die Variablen-Tabelle und die Meldungen: Bei 255 + 1 = 256 passt das Ergebnis nicht mehr in 8 Bit, gespeichert wird 0. Ändere den Typ auf `int8_t` und den Start auf 120 – was passiert dann?',
+    code: [
+      '#define F_CPU 16000000UL',
+      '#include <avr/io.h>',
+      '#include <util/delay.h>',
+      '#include <stdint.h>',
+      '',
+      'int main(void)',
+      '{',
+      '    DDRA = 0xFF;',
+      '    uint8_t wert = 250;',
+      '',
+      '    while (1)',
+      '    {',
+      '        PORTA = wert;',
+      '        _delay_ms(400);',
+      '        wert = wert + 1;   // 255 + 1 = 256 passt nicht -> 0',
+      '    }',
+      '}'
+    ].join('\n')
+  },
+  {
+    title: 'Festkomma: ADC → Millivolt',
+    text: 'Schieb den ADC-Regler. Der Rohwert 0–1023 wird ohne Kommazahlen in Millivolt umgerechnet. Wichtig: `1023 * 5000` passt nicht in 16 Bit – darum der Cast auf `uint32_t`. PORTA zeigt die ganzen Volt, PORTB die Zehntel.',
+    code: [
+      '#define F_CPU 16000000UL',
+      '#include <avr/io.h>',
+      '#include <util/delay.h>',
+      '#include <stdint.h>',
+      '',
+      'int main(void)',
+      '{',
+      '    DDRA = 0xFF;',
+      '    DDRB = 0xFF;',
+      '',
+      '    while (1)',
+      '    {',
+      '        uint16_t roh = ADC;                          // 0 … 1023 (Schieberegler)',
+      '        uint16_t mv = (uint32_t)roh * 5000 / 1023;   // Festkomma: Millivolt',
+      '        uint8_t volt = mv / 1000;                    // ganze Volt',
+      '        uint8_t zehntel = (mv % 1000) / 100;         // erste Nachkommastelle',
+      '        PORTA = volt;',
+      '        PORTB = zehntel;',
+      '        _delay_ms(100);',
+      '    }',
+      '}'
+    ].join('\n')
+  }
+];
+
+/* Simulator-Challenges: phases = Eingaben fuer ms Millisekunden, danach optional expect (sichtbare LEDs = PORTx & DDRx) */
+var SIM_CHALLENGES = [
+  {
+    id: 'sim-led07', title: 'Nur LED 0 und 7',
+    text: 'Lass an PORTA nur die LEDs 0 und 7 leuchten – alle anderen bleiben aus. Tipp: Binär- oder Hex-Literal.',
+    check: { phases: [{ ms: 300, expect: { A: 0x81 } }] }
+  },
+  {
+    id: 'sim-invert', title: 'Schalter umgekehrt',
+    text: 'Zeig auf PORTB das Gegenteil der Schalter an Port C: Schalter an → LED aus und umgekehrt. Tipp: Der Operator `~` dreht alle Bits um.',
+    check: { phases: [
+      { C: 0x00, ms: 80, expect: { B: 0xFF }, say: 'Alle Schalter aus' },
+      { C: 0x0F, ms: 80, expect: { B: 0xF0 }, say: 'Schalter 0–3 an' },
+      { C: 0xA5, ms: 80, expect: { B: 0x5A }, say: 'Schalter 0b10100101' }
+    ] }
+  },
+  {
+    id: 'sim-count', title: 'Zähle mit Taster L0',
+    text: 'Jeder Druck auf Taster L0 erhöht einen `uint8_t`-Zähler um 1, angezeigt auf PORTA. Gedrückt halten darf nur einmal zählen! Tipp: den alten Tasterzustand merken und nur beim Wechsel von 0 auf 1 zählen.',
+    check: { phases: [
+      { L: 0, ms: 60 },
+      { L: 1, ms: 120 }, { L: 0, ms: 120 },
+      { L: 1, ms: 120 }, { L: 0, ms: 120 },
+      { L: 1, ms: 120 }, { L: 0, ms: 120, expect: { A: 3 }, say: 'Nach 3 Tastendrücken' }
+    ] }
+  },
+  {
+    id: 'sim-pingpong', title: 'Lauflicht hin und zurück',
+    text: 'Ein einzelnes Licht wandert auf PORTA von LED 0 bis LED 7 und dann wieder zurück zu LED 0 – immer weiter (mit `_delay_ms`).',
+    check: { phases: [{ ms: 12000 }], seq: { port: 'A', contains: [1, 2, 4, 8, 16, 32, 64, 128, 64, 32, 16, 8, 4, 2, 1] } }
+  },
+  {
+    id: 'sim-free-timer', title: 'Frei: Sekunden mit TCNT1',
+    text: 'Für Profis: Starte Timer 1 mit `TCCR1B = (1 << CS12) | (1 << CS10);` (Vorteiler 1024 → 15625 Takte pro Sekunde) und lass einen Sekundenzähler auf PORTA laufen, ohne `_delay_ms`. Welchen Typ braucht der Vergleichswert?'
+  }
+];
+
+var SIM_SAYS = {
+  hello: 'Schreib C-Code und drück auf Start – ich führe ihn auf meinem virtuellen Board aus. Fang mit einem Beispiel an!',
+  start: 'Läuft! Ich führe deinen Code Anweisung für Anweisung aus. Mit „Schritt“ kannst du mir dabei zuschauen.',
+  error: 'Hoppla – das kann ich so nicht übersetzen. Die rote Zeile im Editor zeigt, wo es klemmt.',
+  runtime: 'Autsch, ein Laufzeitfehler! Schau in die Meldungen unten.',
+  done: 'Fertig! `main` ist zu Ende. Auf dem echten Board wäre das ungewöhnlich – dort läuft `while (1)` für immer.',
+  challenge: 'Challenge geschafft! Du programmierst wie ein echter Embedded-Profi.',
+  challengeFail: 'Noch nicht ganz – lies die Meldung bei der Challenge und probier es nochmal.'
+};

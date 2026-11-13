@@ -1150,10 +1150,26 @@
     focusMain();
   }
 
+  /* ---------- Simulator (Kern + Oberflaeche in js/sim.js) ---------- */
+  function showSimulator() {
+    setCheatAllowed(true);
+    setNav('sim');
+    clear(main);
+    main.style.removeProperty('--lv');
+    if (typeof CSimUI === 'undefined') {
+      main.appendChild(el('p', null, 'Der Simulator (js/sim.js) konnte nicht geladen werden.'));
+    } else {
+      CSimUI.show(main, { el: el, add: add, clear: clear, rich: rich, mascot: mascot, highlightLine: highlightLine });
+    }
+    updateTop();
+    focusMain();
+  }
+
   /* ---------- Navigation ---------- */
   function setNav(which) {
     document.getElementById('nav-levels').setAttribute('aria-current', which === 'levels' ? 'page' : 'false');
     document.getElementById('nav-play').setAttribute('aria-current', which === 'play' ? 'page' : 'false');
+    document.getElementById('nav-sim').setAttribute('aria-current', which === 'sim' ? 'page' : 'false');
   }
   function focusMain() {
     window.scrollTo(0, 0);
@@ -1170,6 +1186,7 @@
     cheatBtn.addEventListener('click', function () { toggleCheat(); });
     document.getElementById('nav-levels').addEventListener('click', showOverview);
     document.getElementById('nav-play').addEventListener('click', showPlayground);
+    document.getElementById('nav-sim').addEventListener('click', showSimulator);
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && !cheatPanel.hidden) { toggleCheat(false); cheatBtn.focus(); }
     });
