@@ -7,7 +7,7 @@
 
   var F_CPU = 16000000;
   var CYC_PER_STEP = 16;      // grobe Annahme: eine Anweisung ~ 1 µs
-  var SRAM = 8192;
+  var MAX_ARR = 1024;   // groesste Arraylaenge im Simulator
   var MAX_DEPTH = 32;
 
   /* ---------- Typen (avr-gcc: int = 16 Bit) ---------- */
@@ -47,7 +47,7 @@
   };
   var QUAL = { 'const': 1, 'volatile': 1, 'static': 1, 'register': 1, 'extern': 1, 'inline': 1 };
   var UNSUP = {
-    struct: '`struct` kennst du aus Level 9 – im Simulator werden structs (noch) nicht unterstützt.',
+    struct: '`struct` wird im Simulator nicht unterstützt.',
     union: '`union` wird im Simulator nicht unterstützt.',
     enum: '`enum` wird im Simulator nicht unterstützt – nimm `#define`-Konstanten.',
     typedef: '`typedef` wird im Simulator nicht unterstützt.'
@@ -91,7 +91,7 @@
     digitalRead: 'Arduino-Funktionen gibt es hier nicht. Taster lesen: `if (PINL & (1 << PL0))`.',
     analogRead: 'Arduino-Funktionen gibt es hier nicht. Im Simulator liest du `ADC` direkt.',
     millis: 'Arduino-Funktionen gibt es hier nicht. Für Zeitmessung gibt es den Timer `TCNT1`.',
-    malloc: 'Dynamischer Speicher ist auf dem 8-KB-SRAM keine gute Idee und wird nicht unterstützt.',
+    malloc: 'Dynamischer Speicher (`malloc`) wird im Simulator nicht unterstützt.',
     sleep: 'Nimm `_delay_ms(…)`.'
   };
   var OK_INCLUDES = { 'avr/io.h': 1, 'stdint.h': 1, 'util/delay.h': 1 };
@@ -699,7 +699,7 @@
     if (main.ret === 'void') warn(main, '`main` sollte `int` zurückgeben: `int main(void)`.');
     if (main.params.length) err('`main` hat auf dem Mikrocontroller keine Parameter: `int main(void)`.', main);
 
-    var scopes = [new Map()], sram = 0;
+    var scopes = [new Map()];
     function lookup(name) {
       for (var i = scopes.length - 1; i >= 0; i--) { var s = scopes[i].get(name); if (s) return s; }
       return null;
@@ -738,11 +738,7 @@
       }
       if (d.isConst && !d.init && !d.list) err('Die `const`-Variable `' + d.name + '` braucht gleich einen Startwert.', d);
       d.bytes = T[d.ty].bytes * (d.arr ? d.len : 1);
-      if (d.bytes > SRAM) err('`' + d.name + '` braucht ' + d.bytes + ' Bytes – das passt nicht in 8 KB SRAM (8192 Bytes) des ATmega2560.', d);
-      if (isGlobal) {
-        sram += d.bytes;
-        if (sram > SRAM) err('Alle globalen Variablen zusammen brauchen ' + sram + ' Bytes – das passt nicht in 8 KB SRAM.', d);
-      }
+      if (d.arr && d.len > MAX_ARR) err('Das Array `' + d.name + '` ist mit ' + d.len + ' Elementen zu gross für den Simulator (höchstens ' + MAX_ARR + ').', d);
       sc.set(d.name, d);
     }
     function lvalue(t, op) {
@@ -900,7 +896,7 @@
       st(f.body, { fn: f, loop: false });
       scopes.pop();
     });
-    return { funcs: funcs, globalBytes: sram };
+    return { funcs: funcs };
   }
 
   function compile(src) {
@@ -910,7 +906,7 @@
       var prog = new Parser(lx.toks, diag).program();
       var c = check(prog, lx.info, diag);
       diag.sort(function (a, b) { return a.line - b.line; });
-      return { ok: true, prog: prog, funcs: c.funcs, globalBytes: c.globalBytes, diag: diag, info: lx.info };
+      return { ok: true, prog: prog, funcs: c.funcs, diag: diag, info: lx.info };
     } catch (e) {
       if (e instanceof SimError) {
         diag.push({ kind: 'error', line: e.line, col: e.col, text: e.msg });
@@ -937,7 +933,7 @@
     Object.keys(REGS).forEach(function (k) { r[k] = 0; });
     this.tc = { val: 0, at: 0, presc: 0 };
     this.cycles = 0; this.steps = 0; this.delays = 0;
-    this.globals = new Map(); this.frames = []; this.sram = 0; this.peakSram = 0;
+    this.globals = new Map(); this.frames = [];
     this.msgs = []; this.once = Object.create(null);
     this.state = 'ready'; this.cur = null; this.gen = null;
     this.portChanges = 0; this.retval = null; this.errLine = 0;
@@ -976,14 +972,8 @@
     this.retval = rv;
     this.say('ok', null, 'Programm beendet: `main` ist zu Ende (Rückgabewert ' + rv + '). Auf dem echten Mikrocontroller sollte `main` nie enden – dafür gibt es `while (1) { … }`.');
   };
-  M.alloc = function (sc, bytes, at) {
-    if (sc) sc.bytes += bytes;
-    this.sram += bytes;
-    if (this.sram > this.peakSram) this.peakSram = this.sram;
-    if (this.sram > SRAM) throw new SimError('Kein Platz mehr: Variablen und Stack brauchen ' + this.sram + ' Bytes – das passt nicht in 8 KB SRAM (8192 Bytes).', at.line, at.col);
-  };
-  M.newScope = function () { var sc = new Map(); sc.bytes = 0; this.top().scopes.push(sc); return sc; };
-  M.endScope = function () { var sc = this.top().scopes.pop(); this.sram -= sc.bytes; };
+  M.newScope = function () { var sc = new Map(); this.top().scopes.push(sc); return sc; };
+  M.endScope = function () { this.top().scopes.pop(); };
   M.conv = function (v, ty, at, label, isReg) {
     var w = wrapT(v, ty);
     if (w !== v) {
@@ -1005,8 +995,8 @@
         for (var j = 0; j < d.len; j++) v.data.push(0n);
         if (d.list) for (j = 0; j < d.list.length; j++) v.data[j] = this.conv(yield* this.ev(d.list[j]), d.ty, d.list[j], d.name + '[' + j + ']');
       } else if (d.init) v.v = this.conv(yield* this.ev(d.init), d.ty, d, d.name);
-      if (isGlobal) { this.alloc(null, v.bytes, d); this.globals.set(d.name, v); }
-      else { var f = this.top(), sc = f.scopes[f.scopes.length - 1]; this.alloc(sc, v.bytes, d); sc.set(d.name, v); }
+      if (isGlobal) this.globals.set(d.name, v);
+      else { var f = this.top(); f.scopes[f.scopes.length - 1].set(d.name, v); }
     }
   };
   M.lookup = function (name) {
@@ -1037,7 +1027,7 @@
       case 'PINA': return r.PORTA;
       case 'PINB': return r.PORTB;
       case 'PINC': return ((r.DDRC & r.PORTC) | (~r.DDRC & this.inputs.C)) & 0xFF;
-      case 'PINL': return ((r.DDRL & r.PORTL) | (~r.DDRL & this.inputs.L)) & 0xFF;
+      case 'PINL': return ((r.DDRL & r.PORTL) | (~r.DDRL & this.inputs.L)) & 0x0F;   // nur PL0-PL3 beschaltet, PL4-PL7 lesen 0
       case 'TCNT1': return this.tcnt();
       case 'ADC': case 'ADCW': return this.inputs.adc & 0x3FF;
       case 'ADCSRA': return r.ADCSRA & ~0x40;
@@ -1153,19 +1143,16 @@
     return yield* this.callFn(n.fn, args, n);
   };
   M.callFn = function* (f, args, at) {
-    if (this.frames.length >= MAX_DEPTH) throw new SimError('Zu tiefe Verschachtelung bzw. Rekursion (' + MAX_DEPTH + ' Aufrufe). Jeder Aufruf belegt Stack im 8-KB-SRAM – irgendwann läuft er über.', at.line, at.col);
-    var sc = new Map(); sc.bytes = 0;
+    if (this.frames.length >= MAX_DEPTH) throw new SimError('Zu tiefe Verschachtelung bzw. Rekursion (' + MAX_DEPTH + ' Aufrufe). Der Simulator bricht hier ab.', at.line, at.col);
+    var sc = new Map();
     this.frames.push({ fn: f, scopes: [sc] });
-    this.alloc(sc, 3, at);   // Ruecksprungadresse: 3 Bytes beim ATmega2560
     for (var i = 0; i < f.params.length; i++) {
       var p = f.params[i];
       var v = { name: p.name, ty: p.ty, arr: false, isConst: p.isConst, bytes: p.bytes, init: true, v: this.conv(args[i], p.ty, at, p.name), line: p.line };
-      this.alloc(sc, p.bytes, at);
       sc.set(p.name, v);
     }
     var c = yield* this.ex(f.body);
     this.frames.pop();
-    this.sram -= sc.bytes;
     if (c && c.k === 'return' && c.v !== null) return f.ret === 'void' ? 0n : this.conv(c.v, f.ret, c.node, 'Rückgabewert von ' + f.name);
     if (f.ret !== 'void' && f.name !== 'main') this.say('warn', at, 'Die Funktion `' + f.name + '` endet ohne `return` – der Rückgabewert ist dann zufällig (Simulator: 0).', 'noret');
     return 0n;
@@ -1319,7 +1306,7 @@
   }
 
   var CSim = {
-    T: T, REGS: REGS, F_CPU: F_CPU, SRAM: SRAM, CYC_PER_STEP: CYC_PER_STEP,
+    T: T, REGS: REGS, F_CPU: F_CPU, MAX_ARR: MAX_ARR, CYC_PER_STEP: CYC_PER_STEP,
     compile: compile, Machine: Machine, run: run, runSteps: runSteps, runCheck: runCheck,
     wrapT: wrapT, promote: promote, common: common, toBin: toBin, toHex: toHex, SimError: SimError
   };
@@ -1532,8 +1519,8 @@
     }
     var ledA = ledRow('A'), ledB = ledRow('B');
     function keyRow() {
-      var row = el('div', { class: 'sim-keys', role: 'group', 'aria-label': 'Taster an Port L – gedrückt halten (Maus, Finger, Leertaste)' });
-      for (var b = 7; b >= 0; b--) (function (bit) {
+      var row = el('div', { class: 'sim-keys', role: 'group', 'aria-label': 'Taster an Port L (PL0–PL3) – gedrückt halten (Maus, Finger, Leertaste)' });
+      for (var b = 3; b >= 0; b--) (function (bit) {
         var k = el('button', { type: 'button', class: 'sim-key', 'aria-label': 'Taster L' + bit, 'aria-pressed': 'false' });
         function down() { inputs.L |= (1 << bit); k.classList.add('down'); k.setAttribute('aria-pressed', 'true'); render(); }
         function up() { if (!(inputs.L & (1 << bit))) return; inputs.L &= ~(1 << bit); k.classList.remove('down'); k.setAttribute('aria-pressed', 'false'); render(); }
@@ -1547,7 +1534,7 @@
         k.addEventListener('contextmenu', function (e) { e.preventDefault(); });
         row.appendChild(el('span', { class: 'sim-in-cell' }, [k, el('span', { class: 'led-no' }, String(bit))]));
       })(b);
-      return el('div', { class: 'sim-port' }, [el('span', { class: 'sim-port-label' }, 'PINL'), row, el('span', { class: 'sim-port-note' }, 'Taster: halten = 1')]);
+      return el('div', { class: 'sim-port' }, [el('span', { class: 'sim-port-label' }, 'PINL'), row, el('span', { class: 'sim-port-note' }, 'Taster: halten = 1 · PL4–PL7 nicht beschaltet')]);
     }
     function swRow() {
       var row = el('div', { class: 'sim-keys', role: 'group', 'aria-label': 'Schalter an Port C' });
@@ -1567,7 +1554,7 @@
     adc.addEventListener('input', function () { inputs.adc = +adc.value; adcOut.textContent = adc.value; render(); });
 
     var board = el('div', { class: 'sim-board', role: 'group', 'aria-label': 'Virtuelles ATmega2560-Board' }, [
-      el('div', { class: 'sim-chip', 'aria-hidden': 'true' }, [el('strong', null, 'ATmega2560'), el('span', null, '16 MHz · 8 KB SRAM')]),
+      el('div', { class: 'sim-chip', 'aria-hidden': 'true' }, [el('strong', null, 'ATmega2560'), el('span', null, '16 MHz')]),
       ledA.node, ledB.node,
       keyRow(), swRow(),
       el('div', { class: 'sim-port sim-adc-row' }, [el('label', { class: 'sim-port-label', for: 'sim-adc' }, 'ADC'), adc, adcOut])
@@ -1588,7 +1575,6 @@
     var varTable = el('div', { class: 'table-wrap sim-table' }, el('table', null, [
       el('caption', null, 'Variablen'),
       el('thead', null, el('tr', null, [el('th', { scope: 'col' }, 'Name'), el('th', { scope: 'col' }, 'Typ'), el('th', { scope: 'col' }, 'Wert'), el('th', { scope: 'col' }, 'Binär')])), varBody]));
-    var sramOut = el('p', { class: 'small sim-sram' });
     var lastVarKey = '';
     function paintVars() {
       var rows = m ? m.listVars() : [];
@@ -1605,7 +1591,6 @@
           el('td', { class: 'mono' }, r.bin)
         ]));
       });
-      sramOut.textContent = m ? 'SRAM belegt: ' + m.sram + ' von 8192 Bytes (Spitze ' + m.peakSram + ')' : '';
     }
 
     /* --- Steuerung --- */
@@ -1712,7 +1697,7 @@
     }
     function render(full) {
       var r = m ? m.r : null;
-      var get = function (n) { return m ? m.peek(n) : (n === 'PINL' ? inputs.L : n === 'PINC' ? inputs.C : n === 'ADC' ? inputs.adc : 0); };
+      var get = function (n) { return m ? m.peek(n) : (n === 'PINL' ? inputs.L & 0x0F : n === 'PINC' ? inputs.C : n === 'ADC' ? inputs.adc : 0); };
       ledA.set(r ? r.PORTA : 0, r ? r.DDRA : 0);
       ledB.set(r ? r.PORTB : 0, r ? r.DDRB : 0);
       REG_SHOW.forEach(function (n) {
@@ -1760,7 +1745,7 @@
         el('div', { class: 'hero-text' }, [
           el('div', { class: 'eyebrow sticker' }, 'Simulator'),
           el('h1', null, ['C-Code auf dem ', el('span', { class: 'mark' }, 'ATmega2560')]),
-          el('p', { class: 'lead' }, 'Schreib ein kleines C-Programm und lass es auf einem virtuellen Arduino-Mega-Board laufen: LEDs an PORTA und PORTB, Taster an Port L, Schalter an Port C. Du siehst Register und Variablen live – und was beim Überlauf passiert.')
+          el('p', { class: 'lead' }, 'Schreib ein kleines C-Programm und lass es auf einem virtuellen Arduino-Mega-Board laufen: LEDs an PORTA und PORTB, 4 Taster an Port L (PL0–PL3), 8 Schalter an Port C. Du siehst Register und Variablen live – und was beim Überlauf passiert.')
         ]),
         bitBox
       ]),
@@ -1782,8 +1767,7 @@
         el('section', { class: 'task-card sim-right', 'aria-label': 'Board' }, [
           board,
           regTable,
-          varTable,
-          sramOut
+          varTable
         ])
       ]),
       el('section', { class: 'task-card sim-challenges', 'aria-labelledby': 'sim-ch-title' }, [

@@ -29,7 +29,6 @@
   --tok-com: #9A97A6;
   --tok-pre: #FFD23F;
   --tok-fn: #6FB8FF;
-  --f0: #5AA9FF; --f1: #FFD23F; --f2: #3DD6AE; --f3: #FF7FB6; --f4: #FF8A5B; --f5: #B79CFF;
   --lv: var(--yellow);
   --r: 6px;
   --bw: 3px;
@@ -432,32 +431,6 @@ button { font: inherit; color: inherit; }
 .bit-values output { color: var(--ink); font-weight: 800; }
 .bit-values .em output { background: var(--yellow); color: #161512; border: 2px solid var(--line); padding: 0 .35em; font-size: 1.2em; }
 
-/* Structs */
-.struct-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.4rem; margin-bottom: .8rem; }
-.struct-grid h3 { font: 800 .75rem/1.3 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
-.fields { list-style: none; padding: 0; margin: 0; display: grid; gap: .5rem; }
-.field { display: flex; align-items: center; gap: .6rem; background: var(--card); border-radius: var(--r); padding: .35rem .5rem; border: var(--bw) solid var(--line); box-shadow: var(--sh-sm); }
-.field code { flex: 1; font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
-.field small { font-family: var(--mono); font-weight: 700; }
-.swatch { width: 16px; height: 16px; flex: none; border: 2px solid var(--line); }
-.mini-group { display: flex; gap: .3rem; }
-.mini { width: 44px; height: 44px; border-radius: 3px; border: 2px solid var(--line); background: var(--card-2); cursor: pointer; font-weight: 900; }
-.mini:hover:not(:disabled) { background: var(--yellow); color: #161512; }
-.mini:active:not(:disabled) { transform: translate(2px, 2px); }
-.mini:disabled { opacity: .35; cursor: default; }
-.mem { display: grid; gap: .3rem; }
-.mem-row { display: flex; gap: .25rem; align-items: center; }
-.mem-off { width: 2rem; font: 700 .75rem var(--mono); color: var(--muted); text-align: right; margin-right: .3rem; }
-.byte { width: 1.9rem; height: 1.9rem; border: 2px solid var(--line); display: inline-flex; align-items: center; justify-content: center; font-family: var(--mono); color: var(--ink); }
-.byte.pad { background: repeating-linear-gradient(45deg, var(--card), var(--card) 3px, var(--card-2) 3px, var(--card-2) 6px); border-style: dashed; }
-.legend { margin-top: .6rem; font-size: .85rem; color: var(--muted); display: flex; align-items: center; gap: .4rem; }
-.size-out { font-weight: 700; font-family: var(--mono); font-size: .95rem; }
-.c0 .swatch, .byte.c0 { background: var(--f0); }
-.c1 .swatch, .byte.c1 { background: var(--f1); }
-.c2 .swatch, .byte.c2 { background: var(--f2); }
-.c3 .swatch, .byte.c3 { background: var(--f3); }
-.c4 .swatch, .byte.c4 { background: var(--f4); }
-.c5 .swatch, .byte.c5 { background: var(--f5); }
 
 /* Spickzettel */
 .cheat { position: fixed; z-index: 30; right: 16px; top: 128px; bottom: 16px; width: min(740px, calc(100vw - 32px)); overflow: auto; background: var(--card); border: var(--bw) solid var(--line); border-radius: var(--r); box-shadow: 8px 8px 0 var(--line); padding: 1rem 1.2rem; }
@@ -519,7 +492,6 @@ button { font: inherit; color: inherit; }
   .level-head > .btn { grid-column: 1 / -1; justify-self: start; }
   .level-head .level-bar { grid-column: 1 / -1; }
   .lv-num { width: 48px; height: 48px; font-size: 1.5rem; }
-  .struct-grid { grid-template-columns: 1fr; }
   .cheat { top: 16px; }
   .bit { width: 2.1rem; height: 2.5rem; font-size: 1.05rem; }
   .bit-cell.byte-start { margin-left: .35rem; }
@@ -539,12 +511,10 @@ button { font: inherit; color: inherit; }
   .station-card h2 { font-size: 1.15rem; }
   .nav-btn { padding: .3em .6em; font-size: .72rem; }
   .feedback.with-bit { gap: .6rem; }
-  .mem-off { width: 1.4rem; }
   .bit-widget { padding: .7rem .5rem; }
   .bits { gap: .2rem; }
   .bit { width: 1.85rem; font-size: .95rem; }
   .bit-cell.byte-start { margin-left: .25rem; }
-  .byte { width: 1.6rem; height: 1.6rem; }
 }
 
 /* AVR-Register und Hex-Zahlen */
@@ -562,17 +532,6 @@ button { font: inherit; color: inherit; }
 .led-no { font: 700 .65rem var(--mono); color: var(--muted); }
 .led-val { font-weight: 800; color: var(--ink); }
 
-/* Structs & RAM-Budget */
-.fit-head { font: 800 .75rem/1.3 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
-.field.fit { flex-wrap: wrap; }
-.fit-name { flex: 1; min-width: 12rem; display: flex; flex-direction: column; }
-.fit-name small { font-family: inherit; font-weight: 600; color: var(--muted); }
-.field.fit select { min-height: 44px; font: 700 .95rem var(--mono); padding: .3em .5em; border-radius: var(--r); border: 2px solid var(--line); background: var(--card-2); color: var(--ink); }
-.ram { display: flex; align-items: center; gap: .8rem; margin: 1rem 0 .3rem; }
-.ram-label { font: 800 .75rem system-ui, sans-serif; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
-.ram-bar { flex: 1; height: 1.4rem; border: var(--bw) solid var(--line); border-radius: var(--r); background: var(--card-2); overflow: hidden; }
-.ram-fill { display: block; height: 100%; background: var(--teal); transition: width .2s; }
-.ram-bar.over .ram-fill { background: var(--coral); }
 
 /* ---------- Simulator ---------- */
 .sim-page { min-width: 0; }
@@ -661,7 +620,6 @@ button.sim-msg:hover { background: rgba(255, 255, 255, .07); }
 .sim-table thead th { font-size: .75rem; color: var(--muted); }
 .sim-table th small { display: block; color: var(--muted); font-weight: 600; font-size: .7rem; }
 .mono { font-family: var(--mono); white-space: nowrap; }
-.sim-sram { margin: .5rem 0 0; color: var(--muted); }
 .sim-challenges { margin-top: 1.6rem; }
 .sim-ch-list { display: grid; gap: .9rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr)); }
 .sim-ch { border: var(--bw) solid var(--line); border-radius: var(--r); padding: .8rem .9rem; background: var(--card); box-shadow: var(--sh-sm); display: flex; flex-direction: column; gap: .5rem; align-items: flex-start; }

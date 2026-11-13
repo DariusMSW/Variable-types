@@ -5,8 +5,8 @@
  *   uint8_t, int8_t, uint16_t, int16_t, uint32_t, int32_t, uint64_t, int64_t
  * Kommazahlen werden als Festkomma gespeichert: Wert x Skalierungsfaktor (10, 100, 1000 ...) als Ganzzahl.
  *
- * Hardware-Belegung (ueberall gleich): PORTA + PORTB = LEDs (Ausgaenge), PORTL = Taster, PORTC = Schalter (Eingaenge,
- * gelesen ueber PINL / PINC). Annahme: aktiv-high, 1 = gedrueckt bzw. eingeschaltet.
+ * Hardware-Belegung (ueberall gleich): PORTA + PORTB = LEDs (Ausgaenge), 4 Taster an PL0-PL3 (gelesen ueber PINL,
+ * PL4-PL7 unbeschaltet -> PINL & 0x0F), 8 Schalter an PORTC (gelesen ueber PINC). Annahme: aktiv-high, 1 = gedrueckt bzw. ein.
  *
  * Aufgabentypen (Feld "type"):
  *  choice    { q, code?, options:[..], answer:index, why?:[..pro Option], hint?, explain }
@@ -19,9 +19,6 @@
  *              -> min/max sind die GESPEICHERTEN (bei Festkomma: skalierten) Ganzzahlen.
  *              -> richtig ist jeder passende Typ mit der kleinsten Byte-Anzahl.
  *  findBug   { q, code:[Zeilen], bugLines:[Indizes], lineHint?, fixes:[..], fix:index, why?, explain }
- *  structFit { q, name, count, budget, fields:[{name, min, max, desc, start}], explain }
- *              -> Feldtypen per Auswahl verkleinern; richtig, wenn jedes Feld den kleinsten passenden Typ hat.
- *              sizeof(struct) = Summe der Felder (avr-gcc: kein Padding).
  *
  * Info-Seite vor jedem Level (Feld "intro" im Level): Liste von Bausteinen, der Reihe nach angezeigt:
  *  { p: 'Absatz' }   { ul: ['Punkt', ..] }   { ol: ['Schritt', ..] }
@@ -62,8 +59,8 @@ var LEVELS = [
     title: 'Grundlagen',
     desc: 'Der ATmega2560, Ports, Typen und das Namensschema.',
     intro: [
-      { p: 'Alle Beispiele laufen auf dem ATmega2560, dem Mikrocontroller auf dem Arduino Mega 2560. Er ist ein 8-Bit-AVR mit 16 MHz, 256 KB Flash (Programm), 8 KB SRAM (Variablen) und 4 KB EEPROM. Eine Gleitkomma-Einheit (FPU) hat er nicht.' },
-      { p: 'Jede Variable hat einen Datentyp. Er legt fest, wie viele Bytes sie belegt und wie die Bits darin gelesen werden. Hier lernst du nur Ganzzahltypen mit fester Grösse. Ihr Name verrät alles:' },
+      { p: 'Alle Beispiele laufen auf dem ATmega2560, dem Mikrocontroller auf dem Arduino Mega 2560. Er ist ein 8-Bit-AVR mit 16 MHz: Er rechnet am liebsten mit 8 Bit auf einmal. Eine Gleitkomma-Einheit (FPU) hat er nicht.' },
+      { p: 'Jede Variable hat einen Datentyp. Er legt fest, wie viele Bits sie hat und wie diese Bits gelesen werden. Hier lernst du nur Ganzzahltypen mit fester Grösse. Ihr Name verrät alles:' },
       { table: { head: ['Teil des Namens', 'Bedeutung', 'Beispiel'], rows: [
         ['`u` am Anfang', 'ohne Vorzeichen (nur 0 und positiv)', '`uint8_t`: 0 … 255'],
         ['ohne `u`', 'mit Vorzeichen (auch negativ)', '`int8_t`: −128 … 127'],
@@ -73,13 +70,14 @@ var LEVELS = [
       { p: 'So ist unser Board belegt. Jeder dieser Ports hat drei Register mit je 8 Bit – ein Bit pro Pin:' },
       { table: { head: ['Port', 'Angeschlossen', 'Richtung'], rows: [
         ['A und B', '8 + 8 LEDs', 'Ausgang: `DDRA = 0xFF;`, dann z.B. `PORTA = 255;`'],
-        ['L', '8 Taster', 'Eingang: `DDRL = 0x00;`, lesen mit `PINL`'],
+        ['L', '4 Taster an PL0 … PL3 (PL4 … PL7 sind frei)', 'Eingang: `DDRL = 0x00;`, lesen mit `PINL & 0x0F`'],
         ['C', '8 Schalter', 'Eingang: `DDRC = 0x00;`, lesen mit `PINC`']
       ] } },
       { ul: [
         '`DDRx` legt die Richtung fest: Bit = 1 → Ausgang, Bit = 0 → Eingang.',
         '`PORTx` setzt die Ausgänge (LED an/aus). Bei einem Eingang schaltet `PORTx` nur den internen Pull-up-Widerstand.',
         '`PINx` liest die Eingänge. Die Taster hängen an Port L – gelesen wird aber `PINL`, nicht `PORTL`.',
+        'An Port L hängen nur 4 Taster (Bits 0 … 3). Die oberen 4 Bits von `PINL` sind unbeschaltet und können zufällig sein. Darum blendest du sie mit einer Maske aus: `uint8_t taster = PINL & 0x0F;`',
         'Annahme auf dieser Seite: Taster und Schalter sind aktiv-high. Gedrückt bzw. eingeschaltet = 1, sonst 0.'
       ] },
       { code: ['#include <avr/io.h>     // Register: DDRA, PORTA, PINL, ...',
@@ -87,14 +85,14 @@ var LEVELS = [
                '',
                'int main(void) {',
                '    DDRA = 0xFF;            // Port A: 8 Ausgänge (LEDs)',
-               '    DDRL = 0x00;            // Port L: 8 Eingänge (Taster)',
+               '    DDRL = 0x00;            // Port L: Eingänge (4 Taster an PL0 … PL3)',
                '    uint8_t zaehler = 0;    // 0 … 255',
                '    while (1) {',
-               '        uint8_t taster = PINL;  // alle 8 Taster auf einmal lesen',
-               '        if (taster & 0x01) {    // Taster 0 gedrückt?',
-               '            zaehler++;          // (ohne Entprellen, vereinfacht)',
+               '        uint8_t taster = PINL & 0x0F;  // 4 Taster lesen, Bits 4 … 7 ausblenden',
+               '        if (taster & 0x01) {           // Taster 0 gedrückt?',
+               '            zaehler++;                 // (ohne Entprellen, vereinfacht)',
                '        }',
-               '        PORTA = zaehler;        // LEDs zeigen den Zähler binär',
+               '        PORTA = zaehler;               // LEDs zeigen den Zähler binär',
                '    }',
                '}'] },
       { ul: [
@@ -111,12 +109,12 @@ var LEVELS = [
     tasks: [
       { type: 'choice',
         q: 'Was legt der Datentyp einer Variablen in C fest?',
-        options: ['Wie viel Speicher sie belegt und wie die Bits darin gedeutet werden',
+        options: ['Wie viele Bits sie hat und wie diese Bits gedeutet werden',
                   'Nur den Namen der Variablen',
                   'An welchem Port die Variable angeschlossen ist',
                   'Die Farbe im Code-Editor'],
         answer: 0,
-        explain: 'Der Typ sagt dem Compiler zwei Dinge: wie viele Bytes reserviert werden und wie die Bits zu lesen sind. Dieselben 8 Bits `11111111` sind z.B. 255 als `uint8_t`, aber −1 als `int8_t`.' },
+        explain: 'Der Typ sagt dem Compiler zwei Dinge: wie viele Bits (bzw. Bytes) die Variable hat und wie die Bits zu lesen sind. Dieselben 8 Bits `11111111` sind z.B. 255 als `uint8_t`, aber −1 als `int8_t`.' },
       { type: 'choice',
         q: 'Was bedeuten das „u“ und die „16“ in `uint16_t`?',
         options: ['ohne Vorzeichen, 16 Bit', 'universal, 16 Byte', 'ohne Vorzeichen, 16 Byte', 'user-defined, Version 16'],
@@ -130,11 +128,11 @@ var LEVELS = [
         why: [null, '16 Bit hat z.B. der Timer1 (`TCNT1`), aber kein Port.', 'Der ATmega2560 ist ein 8-Bit-Controller – Ports sind 8 Bit breit.', 'Ein Bit wäre nur ein einzelner Pin.'],
         explain: 'Port A hat 8 Pins, darum sind `DDRx`, `PORTx` und `PINx` je 8 Bit breit. Der passende Typ dazu ist `uint8_t` (0 … 255).' },
       { type: 'choice',
-        q: 'Die 8 Taster hängen an Port L. Mit welchem Register liest du, welche gedrückt sind?',
+        q: 'Die 4 Taster hängen an PL0 … PL3. Mit welchem Register liest du, welche gedrückt sind?',
         options: ['`PINL`', '`PORTL`', '`DDRL`', '`TCNT1`'],
         answer: 0,
         why: [null, '`PORTL` schaltet bei Eingängen nur die Pull-up-Widerstände. Lesen liefert, was du hineingeschrieben hast – nicht den Taster.', '`DDRL` legt nur die Richtung fest (Eingang/Ausgang).', 'Das ist der Zähler von Timer1.'],
-        explain: 'Eingänge liest man über das PIN-Register: `DDRL = 0x00;` (alle Eingang), dann `uint8_t taster = PINL;`.' },
+        explain: 'Eingänge liest man über das PIN-Register: `DDRL = 0x00;` (alle Eingang), dann `uint8_t taster = PINL & 0x0F;` – die Maske blendet die unbeschalteten Bits 4 … 7 aus.' },
       { type: 'yesno',
         q: 'Auf dieser Seite gilt die Annahme „aktiv-high“. Ist Taster 3 gedrückt, ist dann Bit 3 von `PINL` gleich 1?',
         answer: true,
@@ -143,7 +141,7 @@ var LEVELS = [
         q: 'Welcher Typ passt am besten für den Wert, den du aus `PINC` (8 Schalter) liest?',
         options: ['`uint8_t`', '`int8_t`', '`uint32_t`', '`int64_t`'],
         answer: 0,
-        why: [null, 'Mit Vorzeichen würde Schalter 7 (Bit 7) als negativ gedeutet.', 'Funktioniert, verschwendet aber 3 Bytes – das Register hat nur 8 Bit.', 'Viel zu gross: 8 Bytes für 8 Bits.'],
+        why: [null, 'Mit Vorzeichen würde Schalter 7 (Bit 7) als negativ gedeutet.', 'Funktioniert, ist aber 32 Bit breit – das Register hat nur 8 Bit.', 'Viel zu gross: 64 Bit für 8 Bits.'],
         explain: '8 Bits ohne Vorzeichen = `uint8_t` (0 … 255). Genau so breit ist das Register `PINC`.' },
       { type: 'choice',
         q: 'Was zeigen die LEDs an Port A nach diesen Zeilen?',
@@ -168,40 +166,32 @@ var LEVELS = [
   },
   /* ------------------------------------------------------------ 2 */
   {
-    id: 'speicher',
-    title: 'Speicherbedarf',
-    desc: 'Bytes aus dem Namen ablesen, sizeof, Arrays und 8 KB SRAM.',
+    id: 'bitsbytes',
+    title: 'Bits & Bytes',
+    desc: 'Bitzahl aus dem Typnamen ablesen und in Bytes umrechnen.',
     intro: [
-      { p: 'Speicher wird in Bytes gemessen. 1 Byte besteht aus 8 Bits, jedes Bit ist 0 oder 1. Die Zahl im Typnamen sind Bits – die Bytes rechnest du so aus: Bytes = Bits ÷ 8.' },
+      { p: 'Ein Bit ist 0 oder 1. 8 Bits sind 1 Byte. Die Zahl im Typnamen sind Bits – die Bytes rechnest du so aus: Bytes = Bits ÷ 8. Umgekehrt: Bits = Bytes × 8.' },
       { table: { head: ['Bits im Namen', 'Bytes', 'Typen'], rows: [
         ['8', '1', '`uint8_t`, `int8_t`'],
         ['16', '2', '`uint16_t`, `int16_t`'],
         ['32', '4', '`uint32_t`, `int32_t`'],
         ['64', '8', '`uint64_t`, `int64_t`']
       ] } },
-      { p: 'Der ATmega2560 hat drei Speicher:' },
-      { table: { head: ['Speicher', 'Grösse', 'Wofür'], rows: [
-        ['Flash', '256 KB', 'dein Programm'],
-        ['SRAM', '8 KB = 8192 Bytes', 'alle Variablen und der Stack'],
-        ['EEPROM', '4 KB', 'Daten, die beim Ausschalten erhalten bleiben']
-      ] } },
-      { p: 'Alle Variablen müssen in die 8 KB SRAM passen – das ist schnell voll. Mit `sizeof` fragst du den Compiler nach der Grösse in Bytes. Bei einem Array erhältst du die Grösse des ganzen Arrays: Anzahl Elemente × Grösse eines Elements.' },
-      { code: ['#include <avr/io.h>',
-               '#include <stdint.h>',
-               '',
-               'uint16_t werte[10];             // 10 ADC-Werte',
-               '',
-               'int main(void) {',
-               '    DDRA = 0xFF;',
-               '    PORTA = sizeof(uint16_t);   // LEDs zeigen 2',
-               '    PORTA = sizeof(werte);      // LEDs zeigen 10 * 2 = 20',
-               '    while (1) { }',
-               '}'] },
+      { ul: [
+        'Das `u` ändert die Grösse nicht: `uint16_t` und `int16_t` haben beide 16 Bit = 2 Byte. Nur die Deutung der Bits ist anders.',
+        'Eine Hex-Ziffer steht für 4 Bit. Ein `uint8_t` hat darum 2 Hex-Ziffern (`0xFF`), ein `uint16_t` 4 (`0xFFFF`).',
+        'Ein Port hat 8 Bit = 1 Byte. Für einen `uint16_t` brauchst du zwei Ports, z.B. Port A (High-Byte) und Port B (Low-Byte).',
+        'Auf dem ATmega2560 hat `int` 16 Bit = 2 Byte, auf einem PC meist 32 Bit. Bei `int16_t` steht die Grösse im Namen.'
+      ] },
+      { code: ['uint16_t wert = 0x03E8;    // 16 Bit = 2 Byte = 4 Hex-Ziffern (1000)',
+               'DDRA = 0xFF; DDRB = 0xFF;',
+               'PORTA = wert >> 8;         // High-Byte 0x03',
+               'PORTB = wert & 0xFF;       // Low-Byte  0xE8'] },
       { tip: 'Diese Grössen gelten auf jeder Plattform – genau das ist der Vorteil der Typen mit fester Grösse.' }
     ],
     fact: {
-      title: 'Zum Mond mit 4 KB',
-      text: 'Der Apollo Guidance Computer, der 1969 Menschen zum Mond brachte, hatte nur 2048 Speicherwörter Arbeitsspeicher (rund 4 KB) – halb so viel wie der SRAM deines ATmega2560. Jedes Byte war kostbar.'
+      title: 'Warum hat ein Byte 8 Bit?',
+      text: 'Früher war das nicht klar: Manche Computer arbeiteten mit 6-Bit-Zeichen. Erst der IBM System/360 von 1964 machte das 8-Bit-Byte zum Standard. Seitdem sind Typen fast immer 8, 16, 32 oder 64 Bit breit.'
     },
     tasks: [
       { type: 'number',
@@ -209,44 +199,44 @@ var LEVELS = [
         answer: '8', unit: 'Bits',
         explain: '1 Byte = 8 Bits – genau so viele, wie ein Port LEDs hat.' },
       { type: 'number',
-        q: 'Wie viele Bytes belegt ein `int32_t`?',
+        q: 'Wie viele Bytes hat ein `int32_t`?',
         answer: '4', unit: 'Bytes',
         hint: 'Die Zahl im Namen sind Bits. Teile durch 8.',
         explain: '32 Bit ÷ 8 = 4 Byte – auf jeder Plattform, auch auf dem ATmega2560.' },
       { type: 'number',
-        q: 'Wie viele Bytes belegt ein `uint64_t`?',
+        q: 'Wie viele Bytes hat ein `uint64_t`?',
         answer: '8', unit: 'Bytes',
         explain: '64 Bit ÷ 8 = 8 Byte.' },
       { type: 'choice',
-        q: 'Welche Zahl zeigen die LEDs an Port A?',
-        code: ['uint16_t adc_wert = 1023;', 'DDRA = 0xFF;', 'PORTA = sizeof(adc_wert);'],
-        options: ['2', '16', '1023', '1'],
+        q: 'Welcher Typ hat 16 Bit und kein Vorzeichen?',
+        options: ['`uint16_t`', '`int16_t`', '`uint8_t`', '`uint32_t`'],
         answer: 0,
-        why: [null, '16 sind die Bits – `sizeof` zählt aber Bytes.', '`sizeof` liefert die Grösse, nicht den Inhalt.', '1 Byte hätte ein `uint8_t`.'],
-        explain: '`sizeof` liefert die Grösse in Bytes: `uint16_t` = 2 Byte. Die LEDs zeigen `00000010`.' },
+        why: [null, 'Richtige Grösse, aber ohne `u` hat der Typ ein Vorzeichen.', 'Das sind nur 8 Bit.', 'Das sind 32 Bit.'],
+        explain: '`u` = ohne Vorzeichen, `16` = 16 Bit. Also `uint16_t`: 2 Byte, 0 … 65\'535.' },
       { type: 'number',
-        q: 'Wie viele Bytes SRAM hat der ATmega2560? (8 KB, 1 KB = 1024 Bytes)',
-        answer: '8192', unit: 'Bytes',
-        explain: '8 × 1024 = 8192 Bytes. Darin müssen alle Variablen, Arrays und der Stack Platz finden.' },
-      { type: 'number',
-        q: 'Wie viele `int32_t`-Werte passen rein rechnerisch in die 8192 Bytes SRAM?',
-        answer: '2048', unit: 'Werte',
-        explain: '8192 ÷ 4 = 2048. In der Praxis sind es weniger, weil auch Stack und andere Variablen Platz brauchen. Mit `uint8_t` wären es viermal so viele.' },
-      { type: 'number',
-        q: 'Du speicherst 100 ADC-Werte. Wie viele Bytes belegt dieses Array?',
-        code: ['#include <stdint.h>', 'uint16_t messwerte[100];'],
-        answer: '200', unit: 'Bytes',
-        hint: 'Anzahl Elemente × Grösse eines uint16_t.',
-        explain: '100 Elemente × 2 Byte = 200 Byte. `sizeof(messwerte)` würde 200 liefern.' },
-      { type: 'number',
-        q: 'Wie viele Bytes belegen diese drei Variablen zusammen?',
-        code: ['#include <stdint.h>', '', 'uint8_t  taster;     // Kopie von PINL', 'uint16_t adc_wert;   // 0 … 1023', 'uint32_t zeit_ms;    // Millisekunden seit Start'],
-        answer: '7', unit: 'Bytes',
-        explain: '1 + 2 + 4 = 7 Byte.' },
+        q: 'Ein Typ hat 4 Byte. Wie viele Bits hat er?',
+        answer: '32', unit: 'Bits',
+        hint: 'Bits = Bytes × 8.',
+        explain: '4 × 8 = 32 Bit – das sind `uint32_t` und `int32_t`.' },
       { type: 'yesno',
-        q: 'Du willst 3000 Messwerte als `uint32_t` im SRAM speichern. Passt das Array in die 8 KB?',
-        answer: false,
-        explain: '3000 × 4 = 12\'000 Bytes – mehr als die 8192 Bytes SRAM. Mit `uint16_t` wären es 6000 Bytes, das könnte knapp passen.' }
+        q: 'Hat ein `int16_t` gleich viele Bits wie ein `uint16_t`?',
+        answer: true,
+        explain: 'Ja, beide haben 16 Bit = 2 Byte. Der Unterschied ist nur die Deutung: `int16_t` −32\'768 … 32\'767, `uint16_t` 0 … 65\'535.' },
+      { type: 'choice',
+        q: 'Ein `uint16_t` wird auf zwei Ports verteilt. Welche Bits landen mit `PORTA = wert >> 8;` auf Port A?',
+        options: ['Bits 15 … 8 (das High-Byte)', 'Bits 7 … 0 (das Low-Byte)', 'Nur Bit 8', 'Alle 16 Bits'],
+        answer: 0,
+        why: [null, 'Das Low-Byte bekommst du mit `wert & 0xFF`.', '`>> 8` schiebt alle Bits um 8 Stellen nach rechts, nicht nur eines.', 'Ein Port hat nur 8 Bit – mehr passt nicht hinein.'],
+        explain: '`>> 8` schiebt die oberen 8 Bits nach unten. Port A zeigt dann das High-Byte (Bits 15 … 8), Port B mit `wert & 0xFF` das Low-Byte (Bits 7 … 0). 2 Byte = 2 Ports.' },
+      { type: 'number',
+        q: 'Wie viele Hex-Ziffern brauchst du, um jeden Wert eines `uint16_t` zu schreiben?',
+        answer: '4', unit: 'Ziffern',
+        hint: 'Eine Hex-Ziffer steht für 4 Bit.',
+        explain: '16 Bit ÷ 4 = 4 Hex-Ziffern. Der grösste Wert ist `0xFFFF` = 65\'535.' },
+      { type: 'number',
+        q: 'Jeder Port hat 8 LEDs (1 Byte). Wie viele Ports bräuchtest du, um alle Bits eines `uint32_t` gleichzeitig anzuzeigen?',
+        answer: '4', unit: 'Ports',
+        explain: '32 Bit ÷ 8 Bit pro Port = 4 Ports (32 LEDs). Für einen `uint16_t` reichen zwei: Port A und Port B.' }
     ]
   },
   /* ------------------------------------------------------------ 3 */
@@ -393,7 +383,7 @@ var LEVELS = [
     title: 'Kommazahlen als Festkomma',
     desc: 'Werte skalieren, mit Ganzzahlen rechnen, auf LEDs ausgeben.',
     intro: [
-      { p: 'Der ATmega2560 hat keine Gleitkomma-Einheit (FPU). Gleitkomma-Rechnungen müsste der Compiler in Software nachbauen – das ist langsam und braucht viel Flash. Darum speicherst du Kommazahlen als Festkomma: Wert × Skalierungsfaktor, als Ganzzahl.' },
+      { p: 'Der ATmega2560 hat keine Gleitkomma-Einheit (FPU). Gleitkomma-Rechnungen müsste der Compiler in Software nachbauen – das ist langsam und aufwendig. Darum speicherst du Kommazahlen als Festkomma: Wert × Skalierungsfaktor, als Ganzzahl.' },
       { table: { head: ['Wert', 'Faktor', 'gespeichert', 'Bedeutung'], rows: [
         ['3.84 km', '× 1000', '3840', 'Meter'],
         ['21.5 °C', '× 10', '215', 'Zehntelgrad'],
@@ -439,13 +429,13 @@ var LEVELS = [
     tasks: [
       { type: 'choice',
         q: 'Warum speichert man Kommazahlen auf dem ATmega2560 als Festkomma (Ganzzahl × Faktor)?',
-        options: ['Er hat keine Gleitkomma-Einheit (FPU): Gleitkomma wäre langsam und bräuchte viel Flash',
+        options: ['Er hat keine Gleitkomma-Einheit (FPU): Gleitkomma wäre langsam und aufwendig',
                   'Weil C auf dem AVR keine Kommazahlen kennt',
                   'Weil Ganzzahlen weniger Bits haben als Kommazahlen',
                   'Weil die LEDs sonst flackern'],
         answer: 0,
-        why: [null, 'Doch, der Compiler könnte sie in Software nachbauen – nur eben langsam und gross.', 'Nein, das hängt vom Typ ab, nicht von „Komma“.', 'Mit den LEDs hat das nichts zu tun.'],
-        explain: 'Ohne FPU wird jede Gleitkomma-Operation in viele Ganzzahl-Befehle zerlegt. Festkomma rechnet mit normalen Ganzzahlen: schnell, klein und exakt.' },
+        why: [null, 'Doch, der Compiler könnte sie in Software nachbauen – nur eben langsam.', 'Nein, das hängt vom Typ ab, nicht von „Komma“.', 'Mit den LEDs hat das nichts zu tun.'],
+        explain: 'Ohne FPU wird jede Gleitkomma-Operation in viele Ganzzahl-Befehle zerlegt. Festkomma rechnet mit normalen Ganzzahlen: schnell und exakt.' },
       { type: 'number',
         q: 'Eine Strecke von 3.84 km wird mit dem Faktor 1000 gespeichert (also in Metern). Welche Ganzzahl steht in der Variablen?',
         answer: '3840', unit: 'm',
@@ -498,7 +488,7 @@ var LEVELS = [
     title: 'Effizientesten Typ wählen',
     desc: 'Der kleinste Typ, der sicher passt – auch für Festkomma-Werte.',
     intro: [
-      { p: 'Hier wählst du für eine Variable den sparsamsten Typ, der trotzdem sicher passt. Bei 8 KB SRAM zählt jedes Byte. Gehe in diesen Schritten vor:' },
+      { p: 'Hier wählst du für eine Variable den kleinsten Typ, der trotzdem sicher passt. Ein 8-Bit-Controller rechnet mit `uint8_t` in einem Schritt, mit `uint32_t` braucht er für jede Rechnung mehrere Befehle. Gehe in diesen Schritten vor:' },
       { ol: [
         'Komma? Dann zuerst skalieren: Die Aufgabe nennt den Faktor oder die Genauigkeit. Minimum und Maximum × Faktor.',
         'Bereich bestimmen: kleinster und grösster Wert, der gespeichert wird.',
@@ -633,7 +623,7 @@ var LEVELS = [
         code: ['#include <avr/io.h>', '#include <stdint.h>', '', 'int main(void) {', '    DDRA = 0xFF;            // LEDs', '    DDRL = 0x00;            // Taster', '    while (1) {', '        uint8_t taster = PORTL;', '        PORTA = taster;', '    }', '}'],
         bugLines: [7],
         lineHint: 'Welches Register liefert den Zustand der Eingangs-Pins?',
-        fixes: ['`uint8_t taster = PINL;`', '`uint8_t taster = DDRL;`', '`uint16_t taster = PORTL;`', '`DDRL = 0xFF;`'],
+        fixes: ['`uint8_t taster = PINL & 0x0F;`', '`uint8_t taster = DDRL;`', '`uint16_t taster = PORTL;`', '`DDRL = 0xFF;`'],
         fix: 0,
         why: [null, '`DDRL` enthält nur die Richtung (hier 0x00).', 'Der Typ ist nicht das Problem – das Register ist das falsche.', 'Dann wären die Taster-Pins Ausgänge.'],
         explain: 'Das ist kein Typfehler, sondern ein Register-Fehler: `PORTL` enthält, was du hineingeschrieben hast (bei Eingängen die Pull-up-Einstellung). Den Zustand der Pins liefert `PINL`.' },
@@ -686,92 +676,101 @@ var LEVELS = [
   },
   /* ------------------------------------------------------------ 8 */
   {
-    id: 'structs',
-    title: 'Structs & RAM-Budget',
-    desc: 'sizeof von structs, Arrays im 8-KB-SRAM und Felder verkleinern.',
+    id: 'umwandlung',
+    title: 'Typumwandlung',
+    desc: 'Abschneiden, signed ↔ unsigned, Casts, Integer-Promotion und Bytes zusammensetzen.',
     intro: [
-      { p: 'Ein struct fasst mehrere Felder zu einem Datensatz zusammen, z.B. eine Messung mit ADC-Wert, Temperatur und Zeit.' },
-      { p: 'Auf dem ATmega2560 (avr-gcc) gibt es keine Füllbytes: Der 8-Bit-Prozessor liest jedes Byte einzeln, darum dürfen alle Felder an jeder Adresse liegen. Die Grösse eines structs ist einfach die Summe seiner Felder.' },
-      { code: ['struct Messung {',
-               '    uint16_t adc;            // 2 Byte',
-               '    int16_t  temp_zehntel;   // 2 Byte',
-               '    uint8_t  kanal;          // 1 Byte',
-               '    uint32_t zeit_ms;        // 4 Byte',
-               '};                           // sizeof = 2 + 2 + 1 + 4 = 9',
-               '',
-               'struct Messung log[200];     // 200 × 9 = 1800 Bytes SRAM'] },
+      { p: 'C wandelt Werte oft automatisch in einen anderen Typ um – beim Zuweisen, beim Rechnen und beim Vergleichen. Wer die Regeln kennt, findet viele Fehler sofort.' },
+      { table: { head: ['Situation', 'Was passiert', 'Beispiel'], rows: [
+        ['in kleineren Typ ohne Vorzeichen zuweisen', 'nur die unteren Bits bleiben (Wert mod 2ⁿ)', '`uint8_t y = 300;` → 44'],
+        ['signed → unsigned (gleiche Bits)', 'die Bits bleiben, die Deutung ändert sich', '`int8_t` −1 → `uint8_t` 255'],
+        ['unsigned → signed, zu gross', 'avr-gcc behält die Bits (laut C implementierungsabhängig)', '`uint8_t` 200 → `int8_t` −56'],
+        ['Cast `(typ)wert`', 'du wandelst selbst um, bevor gerechnet wird', '`(uint32_t)a * b`']
+      ] } },
+      { p: 'Integer-Promotion: Bevor C rechnet, werden kleine Typen wie `uint8_t` und `int8_t` zu `int` erweitert. Auf dem ATmega2560 hat `int` nur 16 Bit.' },
+      { code: ['uint8_t a = 200, b = 100;',
+               'uint16_t summe = a + b;      // 300: gerechnet wird in int (16 Bit)',
+               'uint8_t  klein = a + b;      // 44: erst beim Speichern abgeschnitten',
+               'uint8_t  x = 200, y = 200;',
+               'uint32_t p = (uint32_t)x * y; // 40000: Cast VOR der Multiplikation'] },
       { ul: [
-        'Ein Array aus structs braucht Anzahl × `sizeof(struct)`.',
-        'Alles muss in die 8192 Bytes SRAM passen – zusammen mit allen anderen Variablen und dem Stack. Plane darum mit weniger, z.B. ein paar tausend Bytes.',
-        'RAM sparen: Jedes Feld so klein wählen, wie sein Wertebereich erlaubt. Ein Byte weniger pro Datensatz sind bei 1000 Datensätzen schon 1000 Bytes.',
-        'Am PC oder auf ARM-Controllern wäre das anders: Dort fügt der Compiler Füllbytes (Padding) ein, damit z.B. ein `uint32_t` an einer durch 4 teilbaren Adresse liegt. Für den ATmega2560 brauchst du das nicht.'
+        'Ein Ergebnis über 32\'767 passt nicht in `int` (16 Bit). Darum: einen Operanden vorher casten, z.B. `(uint32_t)x * y` oder `(uint16_t)x * y`.',
+        'Vergleich: Sind beide Seiten nach der Promotion `int`, wird normal mit Vorzeichen verglichen. Ist eine Seite `uint16_t` (gleich breit wie `int`), wird die andere zu unsigned – aus −5 wird 65\'531.',
+        'High- und Low-Byte: `hi = wert >> 8; lo = wert & 0xFF;` – und zurück: `wert = (uint16_t)hi << 8 | lo;`.'
       ] },
-      { tip: 'Für jedes Feld: Bereich → kleinster passender Typ. Dann Summe × Anzahl und mit dem freien RAM vergleichen.' }
+      { tip: 'Frag dich bei jeder Rechnung: Welchen Typ haben die Operanden nach der Promotion – und passt das Ergebnis hinein?' }
     ],
     fact: {
-      title: 'Konstanten in den Flash',
-      text: 'Der ATmega2560 hat 32-mal mehr Flash (256 KB) als SRAM (8 KB). Grosse konstante Tabellen – etwa Lauflicht-Muster oder Texte – legt man darum mit `PROGMEM` in den Flash und liest sie mit `pgm_read_byte()`. So bleibt der knappe SRAM für Variablen frei.'
+      title: 'Gangnam Style knackt den Zähler',
+      text: 'YouTube zählte Aufrufe in einer 32-Bit-Ganzzahl mit Vorzeichen. Ende 2014 näherte sich das Video „Gangnam Style“ der Grenze von 2\'147\'483\'647 Aufrufen – YouTube stellte den Zähler darum auf 64 Bit um.'
     },
     tasks: [
       { type: 'number',
-        q: 'Wie gross ist diese struct auf dem ATmega2560?',
-        code: ['struct A {', '    uint8_t  c;', '    uint16_t s;', '    uint8_t  d;', '};', 'PORTA = sizeof(struct A);'],
-        answer: '4', unit: 'Bytes',
-        hint: 'Auf dem ATmega2560 gibt es keine Füllbytes. Einfach zusammenzählen.',
-        explain: '1 + 2 + 1 = 4 Byte. avr-gcc fügt keine Füllbytes ein, die LEDs zeigen 4.' },
+        q: 'Welchen Wert hat `y`?',
+        code: ['uint16_t x = 300;   // 0x012C', 'uint8_t  y = x;'],
+        answer: '44',
+        hint: 'Nur das Low-Byte passt in den `uint8_t`.',
+        explain: '300 = `0x012C`. Ein `uint8_t` behält nur das Low-Byte `0x2C` = 44 (= 300 − 256).' },
       { type: 'number',
-        q: 'Wie gross ist diese struct für ein Taster-Ereignis?',
-        code: ['struct Ereignis {', '    uint8_t  taster;    // Nummer 0 … 7', '    uint32_t zeit_ms;   // wann gedrückt', '    uint8_t  dauer;     // in 10-ms-Schritten', '};'],
-        answer: '6', unit: 'Bytes',
-        explain: '1 + 4 + 1 = 6 Byte. Die Reihenfolge der Felder spielt auf dem ATmega2560 für die Grösse keine Rolle.' },
+        q: 'Welchen Wert hat `u`?',
+        code: ['int8_t  s = -1;', 'uint8_t u = s;'],
+        answer: '255',
+        explain: '−1 ist im Zweierkomplement `11111111`. Als `uint8_t` gelesen sind das 255 (= 256 − 1).' },
+      { type: 'bits', bits: 8, mode: 'ohneVZ', target: 156, leds: true,
+        q: 'Nach `int8_t s = -100; uint8_t u = s; PORTA = u;` – stelle die Bits von `u` ein.',
+        explain: '−100 als `int8_t` ist `10011100`. Dieselben Bits als `uint8_t` sind 128 + 16 + 8 + 4 = 156 (= 256 − 100).' },
+      { type: 'number',
+        q: 'Welchen Wert hat `s` bei avr-gcc?',
+        code: ['uint8_t u = 200;', 'int8_t  s = u;'],
+        answer: '-56',
+        hint: '200 passt nicht in `int8_t` (max. 127). Die Bits bleiben gleich – Bit 7 zählt jetzt −128.',
+        explain: '200 = `11001000`. Als `int8_t` gelesen: −128 + 64 + 8 = −56 (= 200 − 256). Laut C-Standard ist das implementierungsabhängig, avr-gcc behält einfach die Bits.' },
       { type: 'choice',
-        q: 'Warum ist `sizeof` eines structs auf dem ATmega2560 genau die Summe seiner Felder?',
-        options: ['Der 8-Bit-Prozessor liest jedes Byte einzeln – avr-gcc braucht darum keine Füllbytes (Ausrichtung 1)',
-                  'Weil der Compiler die Felder automatisch nach Grösse sortiert',
-                  'Weil structs auf dem AVR verboten sind',
-                  'Weil `sizeof` auf dem AVR die Füllbytes nicht mitzählt'],
+        q: 'Welchen Wert hat `summe`?',
+        code: ['uint8_t a = 200;', 'uint8_t b = 100;', 'uint16_t summe = a + b;'],
+        options: ['300', '44', '255', '0'],
         answer: 0,
-        why: [null, 'Nein, C behält die Reihenfolge der Felder immer bei.', 'Nein, structs sind ganz normal erlaubt.', 'Doch, `sizeof` zählt immer alles – es gibt hier einfach keine Füllbytes.'],
-        explain: 'Auf Prozessoren mit 16-, 32- oder 64-Bit-Zugriffen richtet der Compiler Felder aus und füllt auf. Der ATmega2560 greift byteweise zu – jedes Feld darf an jeder Adresse liegen.' },
-      { type: 'number',
-        q: 'Ein Datenlogger speichert 500 Messungen. Wie viele Bytes SRAM braucht das Array?',
-        code: ['struct Messung {', '    uint16_t adc;', '    int16_t  temp_zehntel;', '    uint8_t  kanal;', '    uint32_t zeit_ms;', '};', 'struct Messung log[500];'],
-        answer: '4500', unit: 'Bytes',
-        hint: 'Erst sizeof(struct Messung) bestimmen (Summe), dann × 500.',
-        explain: '2 + 2 + 1 + 4 = 9 Byte, × 500 = 4500 Byte – mehr als die Hälfte der 8192 Bytes SRAM.' },
+        why: [null, '44 käme heraus, wenn das Ziel ein `uint8_t` wäre – hier ist es ein `uint16_t`.', 'C begrenzt nicht auf den Maximalwert.', 'Nein.'],
+        explain: 'Integer-Promotion: `a` und `b` werden vor dem Rechnen zu `int` (16 Bit) erweitert. 200 + 100 = 300 passt in 16 Bit und in den `uint16_t`.' },
       { type: 'yesno',
-        q: 'Passt `struct Messung log[1000];` (9 Byte pro Messung) in die 8 KB SRAM des ATmega2560?',
-        answer: false,
-        explain: '1000 × 9 = 9000 Bytes > 8192 Bytes. Das Array allein wäre grösser als der ganze SRAM – der Linker meldet einen Fehler bzw. das Programm stürzt ab.' },
-      { type: 'structFit',
-        q: 'Der Datenlogger soll 600 Messungen speichern, frei sind 6000 Bytes. Wähle für jedes Feld den kleinsten passenden Typ.',
-        name: 'Messung', count: 600, budget: 6000,
-        fields: [
-          { name: 'adc', min: '0', max: '1023', desc: 'ADC-Wert, 0 … 1023', start: 'uint32_t' },
-          { name: 'temp_zehntel', min: '-400', max: '850', desc: '−40.0 … 85.0 °C, Faktor 10', start: 'int32_t' },
-          { name: 'kanal', min: '0', max: '15', desc: 'ADC-Kanal 0 … 15', start: 'uint32_t' },
-          { name: 'zeit_s', min: '0', max: '86399', desc: 'Sekunden seit Mitternacht, 0 … 86\'399', start: 'uint64_t' }
-        ],
-        explain: '`uint16_t` (2) + `int16_t` (2) + `uint8_t` (1) + `uint32_t` (4) = 9 Byte. 600 × 9 = 5400 Bytes – passt. Vorher: 20 Byte × 600 = 12\'000 Bytes.' },
-      { type: 'structFit',
-        q: 'Ein Entprell-Protokoll merkt sich 500 Taster-Ereignisse in 3000 freien Bytes. Mach die Felder so klein wie möglich.',
-        name: 'Druck', count: 500, budget: 3000,
-        fields: [
-          { name: 'taster', min: '0', max: '7', desc: 'Taster-Nummer an Port L, 0 … 7', start: 'uint16_t' },
-          { name: 'dauer_ms', min: '0', max: '5000', desc: 'Dauer in ms, 0 … 5000', start: 'uint32_t' },
-          { name: 'zeit_s', min: '0', max: '3599', desc: 'Sekunde innerhalb der Stunde, 0 … 3599', start: 'uint32_t' }
-        ],
-        explain: '`uint8_t` (1) + `uint16_t` (2) + `uint16_t` (2) = 5 Byte. 500 × 5 = 2500 Bytes – passt in 3000. Vorher: 10 Byte × 500 = 5000 Bytes.' },
-      { type: 'structFit',
-        q: 'Eine Wetterstation am Mega speichert 400 Datensätze in 3000 freien Bytes. Die Kommawerte sind Festkomma mit Faktor 10.',
-        name: 'Wetter', count: 400, budget: 3000,
-        fields: [
-          { name: 'temp_zehntel', min: '-400', max: '600', desc: '−40.0 … 60.0 °C, Faktor 10', start: 'int32_t' },
-          { name: 'feuchte_zehntel', min: '0', max: '1000', desc: '0.0 … 100.0 %, Faktor 10', start: 'uint32_t' },
-          { name: 'druck_zehntel', min: '3000', max: '11000', desc: '300.0 … 1100.0 hPa, Faktor 10', start: 'uint32_t' },
-          { name: 'wind', min: '0', max: '50', desc: 'Wind in ganzen m/s, 0 … 50', start: 'int16_t' }
-        ],
-        explain: '`int16_t` (2) + `uint16_t` (2) + `uint16_t` (2) + `uint8_t` (1) = 7 Byte. 400 × 7 = 2800 Bytes – passt knapp. Vorher: 14 Byte × 400 = 5600 Bytes.' }
+        q: 'Leuchten die LEDs?',
+        code: ['uint8_t a = 200, b = 100;', 'DDRA = 0xFF;', 'if (a + b > 255) {', '    PORTA = 0xFF;', '}'],
+        answer: true,
+        explain: 'Ja. `a + b` wird in `int` gerechnet und ist 300 – nicht 44. Abgeschnitten wird erst, wenn du das Ergebnis in einem `uint8_t` speicherst.' },
+      { type: 'choice',
+        q: 'Was zeigen die LEDs? (avr-gcc, `int` = 16 Bit)',
+        code: ['int16_t  temp = -5;', 'uint16_t grenze = 10;', 'DDRA = 0xFF;', 'if (temp < grenze) {', '    PORTA = 0xFF;', '} else {', '    PORTA = 0x00;', '}'],
+        options: ['Alle aus – `temp` wird zu 65\'531 umgewandelt', 'Alle an – −5 ist kleiner als 10', 'Der Compiler verweigert den Vergleich', 'Nur LED 0 leuchtet'],
+        answer: 0,
+        why: [null, 'Mathematisch ja – aber C vergleicht hier ohne Vorzeichen.', 'Der Compiler warnt höchstens – übersetzt wird es.', 'Im Code wird nur `0xFF` oder `0x00` ausgegeben.'],
+        explain: '`uint16_t` ist so breit wie `int`, darum wird `temp` zu unsigned: −5 → 65\'531. 65\'531 < 10 ist falsch, die LEDs bleiben aus. Mit `int8_t` und `uint8_t` wären beide `int` und −5 < 10 wäre wahr.' },
+      { type: 'number',
+        q: 'Welchen Wert hat `wert`?',
+        code: ['uint8_t hi = 0x03;', 'uint8_t lo = 0xE8;', 'uint16_t wert = (uint16_t)hi << 8 | lo;'],
+        answer: '1000',
+        hint: 'hi × 256 + lo.',
+        explain: '`0x03` << 8 = `0x0300` = 768, ODER `0xE8` (232) ergibt `0x03E8` = 768 + 232 = 1000.' },
+      { type: 'bits', bits: 16, mode: 'ohneVZ', target: 65534, leds: true,
+        q: 'Nach `int16_t x = -2; uint16_t u = x;` – stelle die 16 Bits von `u` ein (Port A = High-Byte, Port B = Low-Byte).',
+        explain: '−2 als `int16_t` ist `11111111 11111110`. Als `uint16_t` gelesen: 65\'536 − 2 = 65\'534.' },
+      { type: 'findBug',
+        q: '`flaeche` soll 40\'000 sein. Im Debugger steht aber 4\'294\'941\'760. Welche Zeile ist schuld?',
+        code: ['#include <avr/io.h>', '#include <stdint.h>', '', 'int main(void) {', '    uint8_t breite_cm = 200;', '    uint8_t hoehe_cm = 200;', '    uint32_t flaeche = breite_cm * hoehe_cm;   // cm²', '    while (1) { }', '}'],
+        bugLines: [6],
+        lineHint: 'Das Ziel ist ein `uint32_t` – aber in welchem Typ wird `uint8_t * uint8_t` gerechnet?',
+        fixes: ['`uint32_t flaeche = (uint32_t)breite_cm * hoehe_cm;`', '`uint32_t flaeche = (uint32_t)(breite_cm * hoehe_cm);`', '`int32_t flaeche = breite_cm * hoehe_cm;`', '`int8_t breite_cm = 200;`'],
+        fix: 0,
+        why: [null, 'Die Klammer rechnet zuerst in `int` – der Überlauf passiert vor dem Cast.', 'Auch hier wird zuerst in 16-Bit-`int` gerechnet.', '200 passt nicht einmal in `int8_t`.'],
+        explain: 'Beide `uint8_t` werden zu `int` (16 Bit, max. 32\'767). 200 × 200 = 40\'000 läuft über (undefiniert, avr-gcc liefert −25\'536). Als `uint32_t` gespeichert wird daraus 4\'294\'941\'760. Mit dem Cast vor der Multiplikation rechnet C in 32 Bit.' },
+      { type: 'findBug',
+        q: 'Drei Bytes sollen zu 100\'000 (`0x0186A0`) zusammengesetzt werden. Das Ergebnis stimmt aber nicht. Welche Zeile?',
+        code: ['#include <avr/io.h>', '#include <stdint.h>', '', 'int main(void) {', '    uint8_t b2 = 0x01;   // oberstes Byte', '    uint8_t b1 = 0x86;', '    uint8_t b0 = 0xA0;   // unterstes Byte', '    uint32_t wert = (b2 << 16) | (b1 << 8) | b0;', '    while (1) { }', '}'],
+        bugLines: [7],
+        lineHint: 'In welchem Typ wird `b2 << 16` auf dem ATmega gerechnet – und wie viele Bits hat er?',
+        fixes: ['`uint32_t wert = ((uint32_t)b2 << 16) | ((uint32_t)b1 << 8) | b0;`', '`uint32_t wert = (uint32_t)((b2 << 16) | (b1 << 8) | b0);`', '`uint64_t wert = (b2 << 16) | (b1 << 8) | b0;`', '`uint32_t wert = (b2 << 8) | (b1 << 16) | b0;`'],
+        fix: 0,
+        why: [null, 'Der Cast kommt zu spät – geschoben wird vorher in 16-Bit-`int`.', 'Ein grösseres Ziel ändert nichts: Geschoben wird trotzdem in `int`.', 'Jetzt sind die Bytes vertauscht – und das Problem bleibt.'],
+        explain: '`b2` und `b1` werden zu `int` (16 Bit). `b2 << 16` schiebt um die ganze Breite (undefiniert), und `0x86 << 8` = 34\'304 passt nicht in `int` (max. 32\'767). Erst auf `uint32_t` casten, dann schieben: 65\'536 + 34\'304 + 160 = 100\'000.' }
     ]
   },
   /* ------------------------------------------------------------ 9 */
@@ -786,12 +785,12 @@ var LEVELS = [
       { ul: [
         'Namensschema: `u` = ohne Vorzeichen, Zahl = Bits, z.B. `int16_t` = mit Vorzeichen, 16 Bit = 2 Byte.',
         'Wertebereich mit n Bits: ohne Vorzeichen 0 … 2ⁿ − 1, mit Vorzeichen −2ⁿ⁻¹ … 2ⁿ⁻¹ − 1.',
-        'ATmega2560: 8 KB SRAM, Ports 8 Bit (`DDRx`, `PORTx`, `PINx`), ADC 10 Bit, Timer1 16 Bit, `int` = 16 Bit.',
+        'ATmega2560: Ports 8 Bit (`DDRx`, `PORTx`, `PINx`), 4 Taster an PL0 … PL3 (`PINL & 0x0F`), ADC 10 Bit, Timer1 16 Bit, `int` = 16 Bit.',
         'LEDs: `PORTA` übernimmt nur 8 Bit (Wert mod 256). 16 Bit: `PORTA = wert >> 8; PORTB = wert & 0xFF;`',
         'Zweierkomplement: Das oberste Bit zählt negativ (bei 8 Bit −128).',
         'Festkomma: Wert × Faktor als Ganzzahl. Typ nach dem skalierten Bereich wählen. Multiplikation in grösserem Typ, zuerst multiplizieren, dann teilen.',
         'Zwischenergebnisse: werden mindestens in `int` (16 Bit) gerechnet – nicht im Typ der Zielvariable.',
-        'Structs: `sizeof` = Summe der Felder (kein Padding auf dem AVR), Array = Anzahl × sizeof.'
+        'Typumwandlung: kleinerer Typ behält nur die unteren Bits, signed ↔ unsigned behält die Bits. Kleine Typen werden zum Rechnen zu `int`. Bytes zusammensetzen: `(uint16_t)hi << 8 | lo`.'
       ] },
       { tip: 'Lies jede Aufgabe genau: Welcher Typ, wie viele Bits, mit oder ohne Vorzeichen, welcher Faktor? Viel Erfolg!' }
     ],
@@ -836,15 +835,17 @@ var LEVELS = [
         why: [null, 'Das Ziel ist nicht das Problem – `60 * 1000` wird vorher in 16 Bit gerechnet.', 'Die Klammer rechnet zuerst in `int` – der Überlauf passiert vor der Umwandlung.', 'Die Division ist richtig.'],
         explain: '`60 * 1000` sind zwei `int`-Werte, also rechnet C in 16 Bit: 60\'000 > 32\'767 → Überlauf. Mit `60UL` (unsigned long, 32 Bit) rechnet C in 32 Bit.' },
       { type: 'number',
-        q: 'Wie viele Bytes SRAM belegt dieses Array auf dem ATmega2560?',
-        code: ['struct Ereignis {', '    uint8_t  taster;', '    uint16_t dauer_ms;', '    uint32_t zeit_ms;', '};', 'struct Ereignis protokoll[100];'],
-        answer: '700', unit: 'Bytes',
-        explain: '1 + 2 + 4 = 7 Byte pro Ereignis (keine Füllbytes), × 100 = 700 Byte.' },
-      { type: 'number',
-        q: 'Wie viele Bytes belegt dieses Array?',
-        code: ['#include <stdint.h>', 'uint16_t adc_log[256];'],
-        answer: '512', unit: 'Bytes',
-        explain: '256 × 2 Byte = 512 Byte – ein Sechzehntel der 8 KB SRAM.' }
+        q: 'Welche Zahl zeigen die LEDs an Port A?',
+        code: ['uint16_t x = 0x1234;', 'uint8_t lo = x;', 'DDRA = 0xFF;', 'PORTA = lo;'],
+        answer: '52',
+        explain: 'Ein `uint8_t` behält nur das Low-Byte: `0x34` = 3 × 16 + 4 = 52.' },
+      { type: 'choice',
+        q: 'Welchen Wert hat `u`?',
+        code: ['int8_t  s = -56;', 'uint8_t u = s;'],
+        options: ['200', '56', '-56', '0'],
+        answer: 0,
+        why: [null, 'Das Vorzeichen fällt nicht einfach weg – die Bits bleiben gleich.', 'Ein `uint8_t` kann nicht negativ sein.', 'Nein.'],
+        explain: 'Die Bits `11001000` bleiben gleich, nur die Deutung ändert sich: 256 − 56 = 200.' }
     ]
   }
 ];
@@ -858,7 +859,7 @@ var RANKS = [
   { min: 0.1,  name: 'Byte-Sammler' },
   { min: 0.3,  name: 'Overflow-Jäger' },
   { min: 0.55, name: 'Register-Profi' },
-  { min: 0.8,  name: 'RAM-Meister' },
+  { min: 0.8,  name: 'Typ-Meister' },
   { min: 1,    name: 'AVR-Legende' }
 ];
 
@@ -874,7 +875,7 @@ var BIT_SAYS = {
     'Stimmt. Alle LEDs auf Grün.',
     'Richtig. Notier dir das ruhig als Erfolg.',
     'Volltreffer. Null Fehler, null Drama.',
-    'Bingo. Dein SRAM ist gut organisiert.'
+    'Bingo. Deine Bits sind gut sortiert.'
   ],
   wrong: [
     'Ups, nicht ganz. Nochmal?',
@@ -884,7 +885,7 @@ var BIT_SAYS = {
     'Nope – aber jetzt weisst du schon, was es nicht ist.',
     'Daneben. Kein Problem, neuer Versuch.',
     'Hm, das passt nicht ganz. Der Tipp hilft.',
-    'Nicht ganz. Fehler sind hier gratis – kein Flash wird verbraucht.',
+    'Nicht ganz. Fehler sind hier gratis – kein Bit wird verletzt.',
     'Leider nein. Atme kurz durch, dann nochmal.'
   ],
   meh: 'Funktioniert – aber nicht optimal.',
@@ -895,7 +896,7 @@ var BIT_SAYS = {
     8: '8 in Folge! Alle 8 LEDs leuchten für dich.'
   },
   home: [
-    'Hoi! Ich bin Bit. Ich wohne auf einem ATmega2560 und kenne jedes seiner 8192 Bytes SRAM.',
+    'Hoi! Ich bin Bit. Ich wohne auf einem ATmega2560 und kenne jeden seiner Typen – von `uint8_t` bis `int64_t`.',
     'Bereit? Ein Level nach dem anderen, ohne Stress.',
     'Ich bin ein Mikrochip, aber ich mag Menschen, die Typen mit fester Grösse wählen.'
   ],
@@ -912,7 +913,7 @@ var BIT_SAYS = {
   ],
   done: [
     'Level geschafft! Ich mach einen kleinen Freudensprung.',
-    'Erledigt! Das kommt ins EEPROM – das vergesse ich nie.',
+    'Erledigt! Das merke ich mir – Bit für Bit.',
     'Abgehakt. Du wirst gerade richtig gut.'
   ],
   play: 'Hier kannst du nichts kaputt machen. Ausser den Wertebereich.',
@@ -930,7 +931,7 @@ var BIT_POKE = [
   'Wenn ein `uint8_t` bei 255 noch eins drauflegt, fängt er wieder bei 0 an. Kreislauf des Lebens.',
   'Bei mir ist `int` nur 16 Bit. Darum schreibe ich lieber gleich `int16_t`.',
   'Psst: Taster liest man über `PINL`, nicht über `PORTL`. Mein Lieblingsfakt.',
-  '8 KB SRAM – klingt wenig, reicht aber, wenn man die Typen klug wählt.'
+  '`int8_t` −1 und `uint8_t` 255 sind dieselben 8 Bits. Nur der Typ entscheidet, was sie bedeuten.'
 ];
 
 /* ---------- Simulator: Beispielprogramme (Daten fuer js/sim.js) ---------- */

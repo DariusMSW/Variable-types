@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  var LS_KEY = 'c-variablentypen-fortschritt-v3';
+  var LS_KEY = 'c-variablentypen-fortschritt-v4';
   var state = { solved: {} };     // taskId -> true (im 1. Versuch) / false
   var main, cheatPanel, cheatBtn;
 
@@ -247,7 +247,7 @@
 
   /* ---------- Syntax-Highlighting ---------- */
   var KW = {}, TY = {};
-  'if else for while do return sizeof struct const static void break continue switch case default typedef'.split(' ').forEach(function (w) { KW[w] = 1; });
+  'if else for while do return const static void break continue switch case default typedef'.split(' ').forEach(function (w) { KW[w] = 1; });
   /* 'int' nur fuer `int main(void)` */
   'int size_t int8_t uint8_t int16_t uint16_t int32_t uint32_t int64_t uint64_t'.split(' ').forEach(function (w) { TY[w] = 1; });
   /* AVR-Register (ATmega2560) und Bitnamen in Registern */
@@ -362,14 +362,15 @@
         el('h2', { id: 'cheat-title' }, 'Spickzettel'),
         el('button', { type: 'button', class: 'btn ghost', onclick: function () { toggleCheat(false); } }, 'Schliessen')
       ]),
-      el('p', null, rich('Plattform: ATmega2560 (Arduino Mega 2560, avr-gcc) – 8 KB SRAM, 256 KB Flash, keine FPU. Register: `#include <avr/io.h>`, Typen: `#include <stdint.h>`. Achtung: `int` ist hier nur 16 Bit.')),
+      el('p', null, rich('Plattform: ATmega2560 (Arduino Mega 2560, avr-gcc), 8-Bit-AVR, keine FPU. Register: `#include <avr/io.h>`, Typen: `#include <stdint.h>`. Achtung: `int` ist hier nur 16 Bit.')),
       el('div', { class: 'table-wrap' }, el('table', null, [
         el('thead', null, el('tr', null, [el('th', null, 'Typ'), el('th', null, 'Bytes'), el('th', null, 'Bits'), el('th', null, 'Wertebereich'), el('th', null, 'Typisch am ATmega')])),
         tbody
       ])),
       el('p', { class: 'small' }, rich('Formeln: ohne Vorzeichen (`uintN_t`): 0 … 2ⁿ − 1, mit Vorzeichen (`intN_t`): −2ⁿ⁻¹ … 2ⁿ⁻¹ − 1.')),
-      el('p', { class: 'small' }, rich('Ports: LEDs an `PORTA`/`PORTB` (`DDRA = 0xFF;`), Taster an Port L (`uint8_t taster = PINL;`), Schalter an Port C (`PINC`). 16 Bit auf LEDs: `PORTA = wert >> 8; PORTB = wert & 0xFF;`')),
-      el('p', { class: 'small' }, rich('Festkomma: Wert × Faktor (10, 100, 1000) als Ganzzahl, z.B. 3.84 km → 3840 m → `uint16_t`. Typ nach dem skalierten Bereich wählen. `sizeof(struct)` = Summe der Felder (kein Padding auf dem AVR).'))
+      el('p', { class: 'small' }, rich('Ports: LEDs an `PORTA`/`PORTB` (`DDRA = 0xFF;`), 4 Taster an PL0–PL3 (`uint8_t taster = PINL & 0x0F;`), Schalter an Port C (`PINC`). 16 Bit auf LEDs: `PORTA = wert >> 8; PORTB = wert & 0xFF;`')),
+      el('p', { class: 'small' }, rich('Festkomma: Wert × Faktor (10, 100, 1000) als Ganzzahl, z.B. 3.84 km → 3840 m → `uint16_t`. Typ nach dem skalierten Bereich wählen.')),
+      el('p', { class: 'small' }, rich('Umwandlung: Zuweisung an einen kleineren Typ behält nur die unteren Bits (`(uint8_t)300` = 44). Kleine Typen werden zum Rechnen zu `int` (16 Bit). Bytes zusammensetzen: `(uint16_t)hi << 8 | lo`.'))
     ]);
   }
   function toggleCheat(show) {
@@ -400,7 +401,7 @@
         el('div', { class: 'eyebrow sticker' }, 'C-Typen auf dem ATmega2560 · 9 Levels'),
         el('h1', null, ['Welcher Typ ', el('span', { class: 'mark' }, 'passt'), '?']),
         el('p', { class: 'lead' }, t.done === 0
-          ? 'Lerne Schritt für Schritt am Arduino Mega 2560, welcher Typ wie viel Speicher braucht, welche Werte hineinpassen, wie Kommazahlen als Festkomma funktionieren – und wie man den passenden Typ wählt. Starte mit Level 1!'
+          ? 'Lerne Schritt für Schritt am Arduino Mega 2560, wie viele Bits jeder Typ hat, welche Werte hineinpassen, wie Kommazahlen als Festkomma funktionieren – und wie man den passenden Typ wählt. Starte mit Level 1!'
           : (t.done === t.all ? 'Alles geschafft! Du kannst jedes Level beliebig wiederholen.' : 'Mach dort weiter, wo du aufgehört hast – die markierte Station wartet.'))
       ]),
       mascot(t.done === t.all ? 'party' : 'neutral', t.done === 0 ? pickNew('home', BIT_SAYS.home) : (t.done === t.all ? BIT_SAYS.allDone : pickNew('back', BIT_SAYS.back)), 'hero-bit')
@@ -698,7 +699,7 @@
       el('div', { class: 'eyebrow' }, 'Abschlussprüfung bestanden'),
       el('h1', null, 'Herzlichen Glückwunsch!'),
       el('p', { class: 'big' }, 'Du hast ' + ef + ' von ' + LEVELS[exam].tasks.length + ' Prüfungsaufgaben im ersten Versuch richtig gelöst – insgesamt ' + allFirst + ' von ' + all + ' Aufgaben.'),
-      el('p', null, 'Du weisst jetzt, warum man Typen mit fester Grösse verwendet, wie gross sie sind, welche Werte hineinpassen, wie Bits, LEDs und Zweierkomplement zusammenhängen, wie du Kommazahlen als Festkomma speicherst, wie man sparsam Typen wählt, typische Typ-Fehler auf dem ATmega2560 erkennt und structs ins 8-KB-SRAM einpasst. Das ist eine richtig solide Grundlage!'),
+      el('p', null, 'Du weisst jetzt, warum man Typen mit fester Grösse verwendet, wie gross sie sind, welche Werte hineinpassen, wie Bits, LEDs und Zweierkomplement zusammenhängen, wie du Kommazahlen als Festkomma speicherst, wie man sparsam Typen wählt, typische Typ-Fehler auf dem ATmega2560 erkennt und was bei Typumwandlungen passiert. Das ist eine richtig solide Grundlage!'),
       list,
       el('div', { class: 'actions' }, [
         el('button', { type: 'button', class: 'btn', onclick: showPlayground }, 'Zur Spielwiese'),
@@ -780,8 +781,7 @@
       ]));
     },
     pickType: renderPickType,
-    findBug: renderFindBug,
-    structFit: renderStructFit
+    findBug: renderFindBug
   };
 
   /* 8 LEDs eines Ports (links LED 7, rechts LED 0) */
@@ -976,79 +976,6 @@
         }
       });
     });
-  }
-
-  /* Structs & RAM-Budget (ATmega2560/avr-gcc: kein Padding, sizeof = Summe der Felder) */
-  function smallestBytes(f) {
-    var best = Infinity;
-    PLAY_TYPES.forEach(function (n) { if (fitsBasic(f, n).ok) best = Math.min(best, TYPE_INFO[n].bytes); });
-    return best;
-  }
-  function renderStructFit(t, ctx, box) {
-    var types = t.fields.map(function (f) { return f.start; });
-    var optimum = t.fields.reduce(function (s, f) { return s + smallestBytes(f); }, 0);
-    var startSize = types.reduce(function (s, n) { return s + TYPE_INFO[n].bytes; }, 0);
-    var codeWrap = el('div');
-    var list = el('ol', { class: 'fields' });
-    var ramFill = el('span', { class: 'ram-fill' });
-    var ramBar = el('div', { class: 'ram-bar', 'aria-hidden': 'true' }, ramFill);
-    var sizeOut = el('p', { class: 'size-out', 'aria-live': 'polite' });
-    var selects = [], locked = false;
-    function size() { return types.reduce(function (s, n) { return s + TYPE_INFO[n].bytes; }, 0); }
-
-    function draw() {
-      var s = size(), total = s * t.count;
-      clear(codeWrap);
-      var lines = ['struct ' + t.name + ' {'];
-      t.fields.forEach(function (f, i) { lines.push('    ' + types[i] + ' ' + f.name + ';  // ' + TYPE_INFO[types[i]].bytes + ' Byte'); });
-      lines.push('};  // sizeof = ' + s + ' (keine Füllbytes)');
-      lines.push('struct ' + t.name + ' daten[' + t.count + '];  // ' + t.count + ' * ' + s + ' = ' + total + ' Bytes');
-      codeWrap.appendChild(codeBlock(lines, { title: 'struct.c' }));
-      var pct = Math.min(100, total / t.budget * 100);
-      ramFill.style.width = pct.toFixed(1) + '%';
-      ramBar.classList.toggle('over', total > t.budget);
-      sizeOut.textContent = 'sizeof(struct ' + t.name + ') = ' + s + ' Bytes → ' + t.count + ' × ' + s + ' = ' + fmt(BigInt(total)) + ' von ' + fmt(BigInt(t.budget)) + ' freien Bytes SRAM' +
-        (total > t.budget ? ' – passt nicht!' : ' – passt.') + ' Ausgangslage: ' + fmt(BigInt(startSize * t.count)) + ' Bytes.';
-    }
-    t.fields.forEach(function (f, i) {
-      var sel = el('select', { 'aria-label': 'Typ für ' + f.name });
-      PLAY_TYPES.forEach(function (n) { sel.appendChild(el('option', { value: n, selected: n === types[i] }, n + ' (' + TYPE_INFO[n].bytes + ' B)')); });
-      sel.value = types[i];
-      sel.addEventListener('change', function () { if (locked) return; types[i] = sel.value; draw(); });
-      selects.push(sel);
-      list.appendChild(el('li', { class: 'field fit c' + (i % 6) }, [
-        el('span', { class: 'swatch' }),
-        el('span', { class: 'fit-name' }, [el('code', null, f.name), el('small', null, f.desc)]),
-        sel
-      ]));
-    });
-    add(box, [
-      el('h3', { class: 'fit-head' }, 'Felder (Typ wählen)'),
-      list,
-      el('div', { class: 'ram' }, [el('span', { class: 'ram-label' }, 'SRAM-Budget'), ramBar]),
-      sizeOut,
-      codeWrap,
-      el('div', { class: 'actions left' }, el('button', { type: 'button', class: 'btn', onclick: function () {
-        if (ctx.isFinished()) return;
-        var tooSmall = [], wasteful = [];
-        t.fields.forEach(function (f, i) {
-          var r = fitsBasic(f, types[i]);
-          if (!r.ok) tooSmall.push('`' + f.name + '`: ' + r.msg);
-          else if (TYPE_INFO[types[i]].bytes > smallestBytes(f)) wasteful.push('`' + f.name + '`');
-        });
-        var s = size(), total = s * t.count;
-        if (tooSmall.length) { ctx.wrong(tooSmall[0] + (tooSmall.length > 1 ? ' (Und ' + (tooSmall.length - 1) + ' weitere Felder sind zu klein.)' : ''), 'Zu klein!'); return; }
-        if (wasteful.length) {
-          ctx.wrong('Alle Werte passen' + (total > t.budget ? ', aber das Array ist mit ' + total + ' Bytes zu gross für ' + t.budget + ' Bytes.' : ' und das Array passt in den RAM.') +
-            ' Noch zu gross gewählt: ' + wasteful.join(', ') + '. Es geht mit ' + optimum + ' Bytes pro Datensatz.', 'Funktioniert – aber nicht optimal.');
-          return;
-        }
-        locked = true;
-        selects.forEach(function (x) { x.disabled = true; });
-        ctx.right('sizeof = ' + s + ' Bytes, ' + t.count + ' Datensätze = ' + total + ' Bytes – passt in die ' + t.budget + ' freien Bytes.');
-      } }, 'Prüfen'))
-    ]);
-    draw();
   }
 
   /* ---------- Spielwiese: Overflow-Simulator ---------- */
