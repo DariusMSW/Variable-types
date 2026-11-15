@@ -56,41 +56,36 @@
   'if else while do for break continue return sizeof const volatile static void switch case default goto struct union enum typedef extern register auto inline'
     .split(' ').forEach(function (w) { KEYWORDS[w] = 1; });
 
-  /* ---------- Register des simulierten Boards ---------- */
+  /* ---------- LED-Ausgaben des simulierten Boards (nur Anzeige von Variablenwerten) ---------- */
   var REGS = {};
-  ['A', 'B', 'C', 'L'].forEach(function (p) {
-    ['DDR', 'PORT', 'PIN'].forEach(function (r) { REGS[r + p] = { ty: 'uint8_t' }; });
+  ['A', 'B'].forEach(function (p) {
+    ['DDR', 'PORT'].forEach(function (r) { REGS[r + p] = { ty: 'uint8_t' }; });
   });
-  ['TCCR1A', 'TCCR1B', 'ADMUX', 'ADCSRA'].forEach(function (r) { REGS[r] = { ty: 'uint8_t' }; });
-  REGS.TCNT1 = { ty: 'uint16_t' };
-  REGS.ADC = { ty: 'uint16_t', ro: true };
-  REGS.ADCW = { ty: 'uint16_t', ro: true };
-  var PRESC = [0, 1, 8, 64, 256, 1024, 0, 0];
+  /* Hardware-Namen, die der Simulator bewusst nicht kennt: Es geht nur um Variablentypen. */
+  var HW_UNSUP = /^(?:(?:DDR|PORT|PIN)[A-L]|P[A-L][0-7]|TCNT\d[HL]?|TCCR\d[A-C]?|OCR\d[A-C]?[HL]?|TIMSK\d|TIFR\d|ICR\d[HL]?|ADC[HLW]?|ADMUX|ADCSR[AB]|CS\d\d|WGM\d\d|ADPS\d|ADEN|ADSC|ADIE|ADIF|ADATE|ADLAR|REFS\d|MUX\d)$/;
+  var HW_MSG = ' wird im Simulator nicht unterstützt – hier geht es um Variablentypen. Gib Werte direkt als Variable vor und zeig sie mit `PORTA = wert;` an.';
 
-  /* Bitnamen aus <avr/io.h> */
+  /* Bitnamen aus <avr/io.h> (nur Port A und B) */
   var PREDEF = Object.create(null);
   for (var bb = 0; bb < 8; bb++) {
-    ['A', 'B', 'C', 'L'].forEach(function (p) {
-      PREDEF['P' + p + bb] = bb; PREDEF['PORT' + p + bb] = bb; PREDEF['PIN' + p + bb] = bb; PREDEF['DD' + p + bb] = bb;
+    ['A', 'B'].forEach(function (p) {
+      PREDEF['P' + p + bb] = bb; PREDEF['PORT' + p + bb] = bb; PREDEF['DD' + p + bb] = bb;
     });
   }
-  [['CS10', 0], ['CS11', 1], ['CS12', 2], ['WGM12', 3], ['WGM13', 4], ['ADPS0', 0], ['ADPS1', 1], ['ADPS2', 2], ['ADIE', 3], ['ADIF', 4],
-    ['ADATE', 5], ['ADSC', 6], ['ADEN', 7], ['MUX0', 0], ['MUX1', 1], ['MUX2', 2], ['MUX3', 3], ['MUX4', 4], ['ADLAR', 5], ['REFS0', 6], ['REFS1', 7]]
-    .forEach(function (p) { PREDEF[p[0]] = p[1]; });
 
   var BUILTINS = { _delay_ms: { n: 1, ret: 'void' }, _delay_us: { n: 1, ret: 'void' }, _BV: { n: 1, ret: 'int16_t' } };
   var FN_TIPS = {
     printf: 'Das Board hat keinen Bildschirm – zeig Werte auf den LEDs an, z.B. `PORTA = wert;`.',
     puts: 'Das Board hat keinen Bildschirm – zeig Werte auf den LEDs an.',
     putchar: 'Das Board hat keinen Bildschirm – zeig Werte auf den LEDs an.',
-    scanf: 'Eingaben kommen hier von Tastern (`PINL`) und Schaltern (`PINC`).',
+    scanf: 'Eingaben gibt es im Simulator nicht – gib den Wert direkt im Code vor, z.B. `uint16_t messwert = 1023;`.',
     delay: 'Das ist Arduino. In C heisst das `_delay_ms(…)` aus <util/delay.h>.',
     delayMicroseconds: 'Das ist Arduino. In C heisst das `_delay_us(…)`.',
-    digitalWrite: 'Arduino-Funktionen gibt es hier nicht. Setz die Bits direkt, z.B. `PORTA |= (1 << PA0);`.',
-    pinMode: 'Arduino-Funktionen gibt es hier nicht. Ausgang: `DDRA |= (1 << PA0);`.',
-    digitalRead: 'Arduino-Funktionen gibt es hier nicht. Taster lesen: `if (PINL & (1 << PL0))`.',
-    analogRead: 'Arduino-Funktionen gibt es hier nicht. Im Simulator liest du `ADC` direkt.',
-    millis: 'Arduino-Funktionen gibt es hier nicht. Für Zeitmessung gibt es den Timer `TCNT1`.',
+    digitalWrite: 'Arduino-Funktionen gibt es hier nicht. Zeig einen Wert direkt auf den LEDs an: `PORTA = wert;`.',
+    pinMode: 'Arduino-Funktionen gibt es hier nicht. Zeig einen Wert direkt auf den LEDs an: `PORTA = wert;`.',
+    digitalRead: 'Arduino-Funktionen gibt es hier nicht. Gib den Wert als Variable vor, z.B. `uint8_t an = 1;`.',
+    analogRead: 'Arduino-Funktionen gibt es hier nicht. Gib den Messwert als Variable vor, z.B. `uint16_t messwert = 512;`.',
+    millis: 'Arduino-Funktionen gibt es hier nicht. Zähl die Zeit selbst in einer Variable, z.B. `uint32_t zeit_ms`.',
     malloc: 'Dynamischer Speicher (`malloc`) wird im Simulator nicht unterstützt.',
     sleep: 'Nimm `_delay_ms(…)`.'
   };
@@ -261,7 +256,7 @@
         var dm = /^([A-Za-z_]\w*)(\(?)(.*)$/.exec(rest);
         if (!dm) err('Nach `#define` muss ein Name stehen, z.B. `#define ANZAHL 8`.', at);
         if (dm[2]) err('Makros mit Parametern (`#define ' + dm[1] + '(…)`) werden im Simulator nicht unterstützt. Schreib stattdessen eine Funktion.', at);
-        if (REGS[dm[1]]) err('`' + dm[1] + '` ist schon ein Register – nimm einen anderen Namen.', at);
+        if (REGS[dm[1]]) err('`' + dm[1] + '` ist schon vergeben (LED-Ausgabe) – nimm einen anderen Namen.', at);
         var body = [];
         lexLine(dm[3], ln, body, diag);
         if (dm[1] === 'F_CPU' && body.length === 1 && body[0].t === 'num' && body[0].v !== BigInt(F_CPU)) {
@@ -705,7 +700,7 @@
       return null;
     }
     function undecl(name, at) {
-      if (/^(DDR|PORT|PIN)[A-L]$/.test(name)) err('Das Register `' + name + '` gibt es im Simulator nicht – angeschlossen sind nur Port A, B (LEDs), C (Schalter) und L (Taster).', at);
+      if (HW_UNSUP.test(name)) err('`' + name + '`' + HW_MSG, at);
       if (name === 'true' || name === 'false') err('`' + name + '` gibt es nur mit <stdbool.h> – nimm hier `' + (name === 'true' ? 1 : 0) + '`.', at);
       if (name === 'NULL') err('`NULL` (Zeiger) wird im Simulator nicht unterstützt.', at);
       if (name === 'F_CPU') err('`F_CPU` ist nicht definiert – schreib oben `#define F_CPU 16000000UL`.', at);
@@ -715,7 +710,7 @@
       err('Die Variable `' + name + '` wurde nicht deklariert.' + (best ? ' Meintest du `' + best + '`?' : ' Deklariere sie zuerst, z.B. `uint8_t ' + name + ' = 0;`.'), at);
     }
     function declare(d, isGlobal) {
-      if (REGS[d.name]) err('`' + d.name + '` ist schon ein Register des ATmega2560 – nimm einen anderen Namen.', d);
+      if (REGS[d.name]) err('`' + d.name + '` ist schon vergeben (LED-Ausgabe) – nimm einen anderen Namen.', d);
       if (isGlobal && funcs[d.name]) err('`' + d.name + '` ist schon eine Funktion.', d);
       var sc = scopes[scopes.length - 1];
       if (sc.has(d.name)) err('Die Variable `' + d.name + '` wurde in diesem Block schon deklariert (Zeile ' + sc.get(d.name).line + ').', d);
@@ -743,7 +738,7 @@
     }
     function lvalue(t, op) {
       if (t.k === 'id') {
-        if (t.ref === 'reg') { if (REGS[t.name].ro) err('`' + t.name + '` kann man nur lesen.', t); return; }
+        if (t.ref === 'reg') return;
         if (t.sym.isConst) err('`' + t.name + '` ist `const` und darf nicht verändert werden.', t);
         return;
       }
@@ -762,7 +757,7 @@
       var f = funcs[n.name];
       if (!f) {
         if (lookup(n.name)) err('`' + n.name + '` ist eine Variable, keine Funktion.', n);
-        if (REGS[n.name]) err('`' + n.name + '` ist ein Register, keine Funktion.', n);
+        if (REGS[n.name]) err('`' + n.name + '` ist die LED-Ausgabe, keine Funktion.', n);
         err(FN_TIPS[n.name] ? 'Die Funktion `' + n.name + '` gibt es hier nicht. ' + FN_TIPS[n.name] : 'Die Funktion `' + n.name + '` ist unbekannt.', n);
       }
       if (!f.body) err('Die Funktion `' + n.name + '` ist nur deklariert – der Rumpf `{ … }` fehlt.', n);
@@ -790,7 +785,7 @@
           if (n.a.k !== 'id') err('Nur Arrays kann man mit `[ ]` indizieren.', n);
           s = lookup(n.a.name);
           if (!s) {
-            if (REGS[n.a.name]) err('`' + n.a.name + '` ist ein Register, kein Array. Ein einzelnes Bit liest du z.B. mit `(' + n.a.name + ' >> 3) & 1`.', n);
+            if (REGS[n.a.name]) err('`' + n.a.name + '` ist kein Array. Ein einzelnes Bit liest du z.B. mit `(' + n.a.name + ' >> 3) & 1`.', n);
             undecl(n.a.name, n.a);
           }
           if (!s.arr) err('`' + n.a.name + '` ist kein Array.', n);
@@ -924,19 +919,17 @@
   var BRK = { k: 'break' }, CNT = { k: 'continue' };
   function Machine(compiled) {
     this.c = compiled;
-    this.inputs = { L: 0, C: 0, adc: 512 };
     this.reset();
   }
   var M = Machine.prototype;
   M.reset = function () {
     var r = this.r = {};
     Object.keys(REGS).forEach(function (k) { r[k] = 0; });
-    this.tc = { val: 0, at: 0, presc: 0 };
     this.cycles = 0; this.steps = 0; this.delays = 0;
     this.globals = new Map(); this.frames = [];
     this.msgs = []; this.once = Object.create(null);
     this.state = 'ready'; this.cur = null; this.gen = null;
-    this.portChanges = 0; this.retval = null; this.errLine = 0;
+    this.ledChanges = 0; this.retval = null; this.errLine = 0;
   };
   M.say = function (kind, at, text, key) {
     var k = kind + ':' + (at ? at.line : 0) + ':' + (key || text);
@@ -1021,44 +1014,12 @@
     }
     return v;
   };
-  M.peek = function (name) {
-    var r = this.r;
-    switch (name) {
-      case 'PINA': return r.PORTA;
-      case 'PINB': return r.PORTB;
-      case 'PINC': return ((r.DDRC & r.PORTC) | (~r.DDRC & this.inputs.C)) & 0xFF;
-      case 'PINL': return ((r.DDRL & r.PORTL) | (~r.DDRL & this.inputs.L)) & 0x0F;   // nur PL0-PL3 beschaltet, PL4-PL7 lesen 0
-      case 'TCNT1': return this.tcnt();
-      case 'ADC': case 'ADCW': return this.inputs.adc & 0x3FF;
-      case 'ADCSRA': return r.ADCSRA & ~0x40;
-      default: return r[name];
-    }
-  };
-  M.readReg = function (name, at) {
-    var r = this.r;
-    if ((name === 'PINL' && r.DDRL) || (name === 'PINC' && r.DDRC)) {
-      var p = name.slice(3);
-      this.say('info', at, '`DDR' + p + '` hat gesetzte Bits – diese Pins sind dann Ausgänge, und `' + name + '` liefert dort nicht ' + (p === 'L' ? 'den Taster' : 'den Schalter') + '. Für Eingänge: `DDR' + p + ' = 0x00;`', 'ddrin');
-    }
-    if (name === 'PORTL' || name === 'PORTC') this.say('info', at, 'Eingänge liest man über `PIN' + name.slice(4) + '`, nicht über `' + name + '`. `' + name + '` ist das Ausgangsregister – ' + (name === 'PORTL' ? 'die Taster' : 'die Schalter') + ' siehst du dort nicht.', 'portin');
-    return this.peek(name);
-  };
-  M.vis = function () { var r = this.r; return ((r.PORTA & r.DDRA) << 8) | (r.PORTB & r.DDRB); };
-  M.setPort = function (name, v) { var b = this.vis(); this.r[name] = v; if (this.vis() !== b) this.portChanges++; };
-  M.tcnt = function () { var t = this.tc; if (!t.presc) return t.val; return (t.val + Math.floor((this.cycles - t.at) / t.presc)) % 65536; };
-  M.writeReg = function (name, v, at) {
-    var r = this.r;
-    if (name.indexOf('PIN') === 0) {
-      var p = 'PORT' + name.slice(3);
-      this.say('info', at, 'Schreiben auf `' + name + '` schaltet die Bits von `' + p + '` um (Toggle) – genau wie beim echten ATmega2560.', 'pinw');
-      this.setPort(p, r[p] ^ v);
-      return;
-    }
-    if (name === 'TCNT1') { this.tc.val = v; this.tc.at = this.cycles; return; }
-    if (name === 'TCCR1B') { this.tc.val = this.tcnt(); this.tc.at = this.cycles; this.tc.presc = PRESC[v & 7]; r.TCCR1B = v; return; }
-    if (name.indexOf('PORT') === 0 || name.indexOf('DDR') === 0) { this.setPort(name, v); return; }
-    r[name] = v;
-  };
+  M.peek = function (name) { return this.r[name]; };
+  M.readReg = function (name) { return this.peek(name); };
+  /* Die LEDs zeigen PORTA/PORTB immer an – auch ohne gesetztes DDRA/DDRB (keine Hardware-Stolperfallen). */
+  M.vis = function () { var r = this.r; return (r.PORTA << 8) | r.PORTB; };
+  M.setPort = function (name, v) { var b = this.vis(); this.r[name] = v; if (this.vis() !== b) this.ledChanges++; };
+  M.writeReg = function (name, v) { this.setPort(name, v); };
   M.loc = function* (t) {
     if (t.k === 'id') return t.ref === 'reg' ? { reg: t.name } : { v: this.lookup(t.name) };
     var a = this.lookup(t.a.name), i = yield* this.ev(t.i);
@@ -1262,7 +1223,6 @@
     var c = compile(src);
     if (!c.ok) return { c: c, ok: false };
     var m = new Machine(c);
-    if (opts.inputs) Object.keys(opts.inputs).forEach(function (k) { m.inputs[k] = opts.inputs[k]; });
     var end = runSteps(m, opts.maxSteps || 200000);
     return { c: c, m: m, ok: true, end: end };
   }
@@ -1274,9 +1234,6 @@
     var phases = chk.phases || [];
     for (var p = 0; p < phases.length; p++) {
       var ph = phases[p];
-      if (ph.L !== undefined) m.inputs.L = ph.L;
-      if (ph.C !== undefined) m.inputs.C = ph.C;
-      if (ph.adc !== undefined) m.inputs.adc = ph.adc;
       var end = m.cycles + ph.ms * (F_CPU / 1000);
       while (!ended && m.cycles < end) {
         var r = m.step();
@@ -1284,7 +1241,7 @@
         if (r.type === 'error') return { ok: false, msg: 'Laufzeitfehler in Zeile ' + r.error.line + ': ' + r.error.msg };
         if (r.type === 'done') ended = true;
         if (chk.seq) {
-          var pv = m.r['PORT' + chk.seq.port] & m.r['DDR' + chk.seq.port];
+          var pv = m.r['PORT' + chk.seq.port];
           if (pv !== last) { seq.push(pv); last = pv; if (seq.length > 5000) seq.shift(); }
         }
         if (steps > LIMIT) return { ok: false, msg: 'Die Prüfung hat abgebrochen: zu viele Anweisungen ohne Pause. Fehlt ein `_delay_ms(…)`?' };
@@ -1292,8 +1249,8 @@
       if (ph.expect) {
         var bad = [];
         Object.keys(ph.expect).forEach(function (port) {
-          var want = ph.expect[port], got = m.r['PORT' + port] & m.r['DDR' + port];
-          if (got !== want) bad.push('PORT' + port + ' zeigt ' + hex2(got) + ', erwartet ' + hex2(want) + ((m.r['PORT' + port] & ~m.r['DDR' + port] & 0xFF) ? ' (DDR' + port + ' gesetzt?)' : ''));
+          var want = ph.expect[port], got = m.r['PORT' + port];
+          if (got !== want) bad.push('PORT' + port + ' zeigt ' + hex2(got) + ' (' + got + '), erwartet ' + hex2(want) + ' (' + want + ')');
         });
         if (bad.length) return { ok: false, msg: (ph.say ? ph.say + ': ' : '') + bad.join('; ') + '.' };
       }
@@ -1325,7 +1282,7 @@
   var SPEEDS = [0.25, 0.5, 1, 2, 4, 0];
   var SPEED_LABEL = ['0.25×', '0.5×', '1×', '2×', '4×', 'Turbo'];
   var greeted = false;
-  var REG_SHOW = ['DDRA', 'PORTA', 'DDRB', 'PORTB', 'PINL', 'PINC', 'TCNT1', 'ADC'];
+  var REG_SHOW = ['PORTA', 'PORTB'];
 
   function showSim(main, H) {
     var el = H.el, clear = H.clear, rich = H.rich;
@@ -1333,7 +1290,6 @@
     var CH = typeof SIM_CHALLENGES !== 'undefined' ? SIM_CHALLENGES : [];
     var SAYS = typeof SIM_SAYS !== 'undefined' ? SIM_SAYS : {};
     var saved = lsGet(LS_CODE);
-    var inputs = { L: 0, C: 0, adc: 512 };
     var m = null, mode = 'idle', sleepUntil = 0, raf = 0, runStart = 0, lastDelayT = 0, flickerSaid = false;
     var lastChanges = 0, lastVarPaint = 0, rootEl;
 
@@ -1496,71 +1452,31 @@
         leds[b] = l;
         row.appendChild(el('span', { class: 'led-cell' }, [l, el('span', { class: 'led-no' }, String(b))]));
       }
-      var hint = el('span', { class: 'sim-ddr-hint', hidden: true }, 'DDR' + port + ' nicht gesetzt?');
-      var node = el('div', { class: 'sim-port', role: 'img' }, [el('span', { class: 'sim-port-label' }, 'PORT' + port), row, hint]);
+      var node = el('div', { class: 'sim-port', role: 'img' }, [el('span', { class: 'sim-port-label' }, 'PORT' + port), row]);
       var last = -1;
       return {
         node: node,
-        set: function (pv, dv) {
-          var key = pv * 256 + dv;
-          if (key === last) return;
-          last = key;
+        set: function (pv) {
+          if (pv === last) return;
+          last = pv;
           var on = [];
           for (var b = 0; b < 8; b++) {
-            var p = (pv >> b) & 1, d = (dv >> b) & 1;
-            leds[b].classList.toggle('on', !!(p && d));
-            leds[b].classList.toggle('weak', !!(p && !d));
-            if (p && d) on.push(b);
+            var p = (pv >> b) & 1;
+            leds[b].classList.toggle('on', !!p);
+            if (p) on.push(b);
           }
-          hint.hidden = !(pv & ~dv & 0xFF);
-          node.setAttribute('aria-label', 'LEDs an PORT' + port + ': ' + (on.length ? 'LED ' + on.reverse().join(', ') + ' leuchten' : 'alle aus') + (hint.hidden ? '' : '. DDR' + port + ' nicht gesetzt?'));
+          node.setAttribute('aria-label', 'LEDs an PORT' + port + ': ' + (on.length ? 'LED ' + on.reverse().join(', ') + ' leuchten' : 'alle aus'));
         }
       };
     }
     var ledA = ledRow('A'), ledB = ledRow('B');
-    function keyRow() {
-      var row = el('div', { class: 'sim-keys', role: 'group', 'aria-label': 'Taster an Port L (PL0–PL3) – gedrückt halten (Maus, Finger, Leertaste)' });
-      for (var b = 3; b >= 0; b--) (function (bit) {
-        var k = el('button', { type: 'button', class: 'sim-key', 'aria-label': 'Taster L' + bit, 'aria-pressed': 'false' });
-        function down() { inputs.L |= (1 << bit); k.classList.add('down'); k.setAttribute('aria-pressed', 'true'); render(); }
-        function up() { if (!(inputs.L & (1 << bit))) return; inputs.L &= ~(1 << bit); k.classList.remove('down'); k.setAttribute('aria-pressed', 'false'); render(); }
-        k.addEventListener('pointerdown', function (e) { if (e.button && e.button !== 0) return; e.preventDefault(); try { k.setPointerCapture(e.pointerId); } catch (x) { /* egal */ } k.focus({ preventScroll: true }); down(); });
-        k.addEventListener('pointerup', up);
-        k.addEventListener('pointercancel', up);
-        k.addEventListener('lostpointercapture', up);
-        k.addEventListener('keydown', function (e) { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (!e.repeat) down(); } });
-        k.addEventListener('keyup', function (e) { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); up(); } });
-        k.addEventListener('blur', up);
-        k.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-        row.appendChild(el('span', { class: 'sim-in-cell' }, [k, el('span', { class: 'led-no' }, String(bit))]));
-      })(b);
-      return el('div', { class: 'sim-port' }, [el('span', { class: 'sim-port-label' }, 'PINL'), row, el('span', { class: 'sim-port-note' }, 'Taster: halten = 1 · PL4–PL7 nicht beschaltet')]);
-    }
-    function swRow() {
-      var row = el('div', { class: 'sim-keys', role: 'group', 'aria-label': 'Schalter an Port C' });
-      for (var b = 7; b >= 0; b--) (function (bit) {
-        var s = el('button', { type: 'button', role: 'switch', 'aria-checked': 'false', class: 'sim-sw', 'aria-label': 'Schalter C' + bit });
-        s.addEventListener('click', function () {
-          inputs.C ^= (1 << bit);
-          s.setAttribute('aria-checked', inputs.C & (1 << bit) ? 'true' : 'false');
-          render();
-        });
-        row.appendChild(el('span', { class: 'sim-in-cell' }, [s, el('span', { class: 'led-no' }, String(bit))]));
-      })(b);
-      return el('div', { class: 'sim-port' }, [el('span', { class: 'sim-port-label' }, 'PINC'), row, el('span', { class: 'sim-port-note' }, 'Schalter: oben = 1')]);
-    }
-    var adc = el('input', { type: 'range', min: 0, max: 1023, step: 1, value: 512, id: 'sim-adc', class: 'sim-adc' });
-    var adcOut = el('output', { for: 'sim-adc', class: 'sim-adc-out' }, '512');
-    adc.addEventListener('input', function () { inputs.adc = +adc.value; adcOut.textContent = adc.value; render(); });
 
-    var board = el('div', { class: 'sim-board', role: 'group', 'aria-label': 'Virtuelles ATmega2560-Board' }, [
+    var board = el('div', { class: 'sim-board', role: 'group', 'aria-label': 'LED-Anzeige: PORTA und PORTB zeigen Variablenwerte' }, [
       el('div', { class: 'sim-chip', 'aria-hidden': 'true' }, [el('strong', null, 'ATmega2560'), el('span', null, '16 MHz')]),
-      ledA.node, ledB.node,
-      keyRow(), swRow(),
-      el('div', { class: 'sim-port sim-adc-row' }, [el('label', { class: 'sim-port-label', for: 'sim-adc' }, 'ADC'), adc, adcOut])
+      ledA.node, ledB.node
     ]);
 
-    /* --- Register & Variablen --- */
+    /* --- Variablen (Hauptteil) & LED-Werte --- */
     var regCells = {};
     var regBody = el('tbody');
     REG_SHOW.forEach(function (r) {
@@ -1569,7 +1485,7 @@
       regBody.appendChild(el('tr', null, [el('th', { scope: 'row' }, el('code', null, r)), c.bin, c.hex, c.dec]));
     });
     var regTable = el('div', { class: 'table-wrap sim-table' }, el('table', null, [
-      el('caption', null, 'Register'),
+      el('caption', null, 'LED-Anzeige'),
       el('thead', null, el('tr', null, [el('th', { scope: 'col' }, 'Name'), el('th', { scope: 'col' }, 'Binär'), el('th', { scope: 'col' }, 'Hex'), el('th', { scope: 'col' }, 'Dez')])), regBody]));
     var varBody = el('tbody');
     var varTable = el('div', { class: 'table-wrap sim-table' }, el('table', null, [
@@ -1628,7 +1544,6 @@
       }
       errLine = 0;
       m = new Machine(c);
-      m.inputs = inputs;
       runStart = performance.now(); lastDelayT = runStart; flickerSaid = false; lastChanges = 0;
       return true;
     }
@@ -1685,8 +1600,8 @@
           after(r); break;
         }
         flush();
-        var ch = m ? m.portChanges - lastChanges : 0;
-        if (m) lastChanges = m.portChanges;
+        var ch = m ? m.ledChanges - lastChanges : 0;
+        if (m) lastChanges = m.ledChanges;
         if (!flickerSaid && ch >= 3 && now - lastDelayT > 1000 && now - runStart > 600) {
           flickerSaid = true;
           log({ kind: 'info', line: 0, text: 'Ohne `_delay_ms(…)` ändern sich die LEDs viele tausend Mal pro Sekunde – auf dem echten Board flackert das zu schnell zum Sehen. Bau eine Pause ein, z.B. `_delay_ms(200);`.' });
@@ -1697,9 +1612,9 @@
     }
     function render(full) {
       var r = m ? m.r : null;
-      var get = function (n) { return m ? m.peek(n) : (n === 'PINL' ? inputs.L & 0x0F : n === 'PINC' ? inputs.C : n === 'ADC' ? inputs.adc : 0); };
-      ledA.set(r ? r.PORTA : 0, r ? r.DDRA : 0);
-      ledB.set(r ? r.PORTB : 0, r ? r.DDRB : 0);
+      var get = function (n) { return m ? m.peek(n) : 0; };
+      ledA.set(r ? r.PORTA : 0);
+      ledB.set(r ? r.PORTB : 0);
       REG_SHOW.forEach(function (n) {
         var v = get(n), ty = REGS[n].ty, c = regCells[n];
         var bin = toBin(BigInt(v), ty), hx = toHex(BigInt(v), ty), dc = String(v);
@@ -1745,7 +1660,7 @@
         el('div', { class: 'hero-text' }, [
           el('div', { class: 'eyebrow sticker' }, 'Simulator'),
           el('h1', null, ['C-Code auf dem ', el('span', { class: 'mark' }, 'ATmega2560')]),
-          el('p', { class: 'lead' }, 'Schreib ein kleines C-Programm und lass es auf einem virtuellen Arduino-Mega-Board laufen: LEDs an PORTA und PORTB, 4 Taster an Port L (PL0–PL3), 8 Schalter an Port C. Du siehst Register und Variablen live – und was beim Überlauf passiert.')
+          el('p', { class: 'lead' }, 'Schreib ein kleines C-Programm mit Variablen und lass es laufen. Die Variablen-Tabelle zeigt Name, Typ, Wert und Bits live – und was beim Überlauf passiert. 8 + 8 LEDs an PORTA und PORTB zeigen Werte zusätzlich binär an.')
         ]),
         bitBox
       ]),
@@ -1764,20 +1679,20 @@
           el('h2', { class: 'sim-h' }, 'Meldungen'),
           cons
         ]),
-        el('section', { class: 'task-card sim-right', 'aria-label': 'Board' }, [
+        el('section', { class: 'task-card sim-right', 'aria-label': 'Variablen und LEDs' }, [
+          varTable,
           board,
-          regTable,
-          varTable
+          regTable
         ])
       ]),
       el('section', { class: 'task-card sim-challenges', 'aria-labelledby': 'sim-ch-title' }, [
         el('h2', { id: 'sim-ch-title' }, 'Challenges'),
-        el('p', null, 'Schreib den Code im Editor oben und klick auf „Prüfen“. Der Simulator lässt dein Programm im Hintergrund laufen, drückt bei Bedarf die Taster bzw. legt die Schalter um und schaut dann auf die LEDs.'),
+        el('p', null, 'Schreib den Code im Editor oben und klick auf „Prüfen“. Der Simulator lässt dein Programm im Hintergrund laufen und schaut dann, welche Werte PORTA und PORTB zeigen.'),
         chList
       ]),
       el('aside', { class: 'tip sim-diff' }, [
         el('div', { class: 'fact-label' }, 'Gut zu wissen'),
-        el('p', null, rich('Der Simulator rechnet wie avr-gcc: `int` hat 16 Bit, kleinere Typen werden vor dem Rechnen zu `int` erweitert, und beim Speichern wird auf den Zieltyp gekürzt. Vereinfachungen: Eine Anweisung dauert hier immer ca. 1 µs, `ADC` liefert direkt den Wert des Schiebereglers (ohne `ADCSRA`-Wandlung abzuwarten), und vorzeichenbehafteter Überlauf wird als Wraparound gezeigt, obwohl er in echtem C undefiniert ist.'))
+        el('p', null, rich('Der Simulator rechnet wie avr-gcc: `int` hat 16 Bit, kleinere Typen werden vor dem Rechnen zu `int` erweitert, und beim Speichern wird auf den Zieltyp gekürzt. Vereinfachungen: Eine Anweisung dauert hier immer ca. 1 µs, die LEDs zeigen `PORTA`/`PORTB` auch ohne `DDRA = 0xFF;`, und vorzeichenbehafteter Überlauf wird als Wraparound gezeigt, obwohl er in echtem C undefiniert ist.'))
       ])
     ]);
     main.appendChild(rootEl);

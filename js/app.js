@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  var LS_KEY = 'c-variablentypen-fortschritt-v4';
+  var LS_KEY = 'c-variablentypen-fortschritt-v5';
   var state = { solved: {} };     // taskId -> true (im 1. Versuch) / false
   var main, cheatPanel, cheatBtn;
 
@@ -250,9 +250,9 @@
   'if else for while do return const static void break continue switch case default typedef'.split(' ').forEach(function (w) { KW[w] = 1; });
   /* 'int' nur fuer `int main(void)` */
   'int size_t int8_t uint8_t int16_t uint16_t int32_t uint32_t int64_t uint64_t'.split(' ').forEach(function (w) { TY[w] = 1; });
-  /* AVR-Register (ATmega2560) und Bitnamen in Registern */
-  var REG = /^(?:(?:DDR|PORT|PIN)[A-L]|TCNT[0-5][HL]?|OCR[0-5][ABC]?[HL]?|TCCR[0-5][ABC]?|TIMSK[0-5]|TIFR[0-5]|ICR[1345][HL]?|ADC[HLW]?|ADMUX|ADCSR[AB]|DIDR[0-2]|SREG|EEAR[HL]?|EEDR|EECR|UDR[0-3]|UCSR[0-3][ABC]|UBRR[0-3][HL]?)$/;
-  var REG_BIT = /^(?:REFS[01]|ADLAR|MUX[0-5]|ADEN|ADSC|ADATE|ADIF|ADIE|ADPS[0-2]|CS[0-5][0-2]|WGM[0-5][0-3]|COM[0-5][ABC][01]|TOIE[0-5]|OCIE[0-5][ABC]|TOV[0-5]|OCF[0-5][ABC]|F_CPU)$/;
+  /* LED-Ausgaben PORTA/PORTB (nur Kulisse) und F_CPU */
+  var REG = /^(?:DDR|PORT)[AB]$/;
+  var REG_BIT = /^F_CPU$/;
   var TOKEN = /(\/\/.*$)|(\/\*.*?\*\/)|("(?:\\.|[^"\\])*")|('(?:\\.|[^'\\])*')|(____)|(\b0[xX][0-9a-fA-F]+\b|\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[fFuUlL]*)|([A-Za-z_]\w*)/g;
 
   function highlightLine(line) {
@@ -362,13 +362,13 @@
         el('h2', { id: 'cheat-title' }, 'Spickzettel'),
         el('button', { type: 'button', class: 'btn ghost', onclick: function () { toggleCheat(false); } }, 'Schliessen')
       ]),
-      el('p', null, rich('Plattform: ATmega2560 (Arduino Mega 2560, avr-gcc), 8-Bit-AVR, keine FPU. Register: `#include <avr/io.h>`, Typen: `#include <stdint.h>`. Achtung: `int` ist hier nur 16 Bit.')),
+      el('p', null, rich('Plattform: ATmega2560 (Arduino Mega 2560, avr-gcc), 8-Bit-AVR, keine FPU. Typen: `#include <stdint.h>`. Achtung: `int` ist hier nur 16 Bit.')),
       el('div', { class: 'table-wrap' }, el('table', null, [
         el('thead', null, el('tr', null, [el('th', null, 'Typ'), el('th', null, 'Bytes'), el('th', null, 'Bits'), el('th', null, 'Wertebereich'), el('th', null, 'Typisch am ATmega')])),
         tbody
       ])),
       el('p', { class: 'small' }, rich('Formeln: ohne Vorzeichen (`uintN_t`): 0 … 2ⁿ − 1, mit Vorzeichen (`intN_t`): −2ⁿ⁻¹ … 2ⁿ⁻¹ − 1.')),
-      el('p', { class: 'small' }, rich('Ports: LEDs an `PORTA`/`PORTB` (`DDRA = 0xFF;`), 4 Taster an PL0–PL3 (`uint8_t taster = PINL & 0x0F;`), Schalter an Port C (`PINC`). 16 Bit auf LEDs: `PORTA = wert >> 8; PORTB = wert & 0xFF;`')),
+      el('p', { class: 'small' }, rich('Ausgabe in den Beispielen: 8 LEDs an `PORTA` (und `PORTB`) zeigen die Bits einer Variable. 16 Bit auf LEDs: `PORTA = wert >> 8; PORTB = wert & 0xFF;`')),
       el('p', { class: 'small' }, rich('Festkomma: Wert × Faktor (10, 100, 1000) als Ganzzahl, z.B. 3.84 km → 3840 m → `uint16_t`. Typ nach dem skalierten Bereich wählen.')),
       el('p', { class: 'small' }, rich('Umwandlung: Zuweisung an einen kleineren Typ behält nur die unteren Bits (`(uint8_t)300` = 44). Kleine Typen werden zum Rechnen zu `int` (16 Bit). Bytes zusammensetzen: `(uint16_t)hi << 8 | lo`.'))
     ]);
@@ -808,7 +808,7 @@
     };
   }
 
-  /* Bit-Umschalter */
+  /* Bit-Buttons */
   function bitWidget(n, emphasis, opts) {
     opts = opts || {};
     var bits = [], locked = false;

@@ -5,8 +5,8 @@
  *   uint8_t, int8_t, uint16_t, int16_t, uint32_t, int32_t, uint64_t, int64_t
  * Kommazahlen werden als Festkomma gespeichert: Wert x Skalierungsfaktor (10, 100, 1000 ...) als Ganzzahl.
  *
- * Hardware-Belegung (ueberall gleich): PORTA + PORTB = LEDs (Ausgaenge), 4 Taster an PL0-PL3 (gelesen ueber PINL,
- * PL4-PL7 unbeschaltet -> PINL & 0x0F), 8 Schalter an PORTC (gelesen ueber PINC). Annahme: aktiv-high, 1 = gedrueckt bzw. ein.
+ * Es geht nur um Variablentypen. In Codebeispielen zeigen LEDs an PORTA (und PORTB) nur den Wert einer Variablen an
+ * (reine Kulisse, wird nicht erklaert oder abgefragt).
  *
  * Aufgabentypen (Feld "type"):
  *  choice    { q, code?, options:[..], answer:index, why?:[..pro Option], hint?, explain }
@@ -42,9 +42,9 @@ var TYPE_INFO = {
 
 /* Zeilen des Spickzettels. Wertebereich wird automatisch berechnet. */
 var CHEAT_ROWS = [
-  { type: 'uint8_t',  use: 'Port-Register (`PORTA`, `PINL`), Taster-Bits, kleine Zähler' },
+  { type: 'uint8_t',  use: 'kleine Zähler (bis 255), Ja/Nein-Werte, LED-Muster' },
   { type: 'int8_t',   use: 'Temperatur in ganzen °C, kleine Differenzen' },
-  { type: 'uint16_t', use: 'ADC-Wert (0 … 1023), Timer1 (`TCNT1`), Spannung in mV' },
+  { type: 'uint16_t', use: 'Sensorwert (0 … 1023), Spannung in mV, Strecke in m' },
   { type: 'int16_t',  use: 'Temperatur in Zehntelgrad, `int` bei avr-gcc' },
   { type: 'uint32_t', use: 'Millisekunden-Zähler, Festkomma-Zwischenergebnisse' },
   { type: 'int32_t',  use: 'Geldbeträge in Rappen, Positionen mit Vorzeichen' },
@@ -57,7 +57,7 @@ var LEVELS = [
   {
     id: 'grundlagen',
     title: 'Grundlagen',
-    desc: 'Der ATmega2560, Ports, Typen und das Namensschema.',
+    desc: 'Der ATmega2560, Datentypen und das Namensschema.',
     intro: [
       { p: 'Alle Beispiele laufen auf dem ATmega2560, dem Mikrocontroller auf dem Arduino Mega 2560. Er ist ein 8-Bit-AVR mit 16 MHz: Er rechnet am liebsten mit 8 Bit auf einmal. Eine Gleitkomma-Einheit (FPU) hat er nicht.' },
       { p: 'Jede Variable hat einen Datentyp. Er legt fest, wie viele Bits sie hat und wie diese Bits gelesen werden. Hier lernst du nur Ganzzahltypen mit fester Grösse. Ihr Name verrät alles:' },
@@ -67,51 +67,37 @@ var LEVELS = [
         ['Zahl', 'Anzahl Bits (8, 16, 32 oder 64)', '`uint16_t` = 16 Bit'],
         ['`_t`', '„type“ – zeigt, dass es ein Typname ist', '']
       ] } },
-      { p: 'So ist unser Board belegt. Jeder dieser Ports hat drei Register mit je 8 Bit – ein Bit pro Pin:' },
-      { table: { head: ['Port', 'Angeschlossen', 'Richtung'], rows: [
-        ['A und B', '8 + 8 LEDs', 'Ausgang: `DDRA = 0xFF;`, dann z.B. `PORTA = 255;`'],
-        ['L', '4 Taster an PL0 … PL3 (PL4 … PL7 sind frei)', 'Eingang: `DDRL = 0x00;`, lesen mit `PINL & 0x0F`'],
-        ['C', '8 Schalter', 'Eingang: `DDRC = 0x00;`, lesen mit `PINC`']
-      ] } },
-      { ul: [
-        '`DDRx` legt die Richtung fest: Bit = 1 → Ausgang, Bit = 0 → Eingang.',
-        '`PORTx` setzt die Ausgänge (LED an/aus). Bei einem Eingang schaltet `PORTx` nur den internen Pull-up-Widerstand.',
-        '`PINx` liest die Eingänge. Die Taster hängen an Port L – gelesen wird aber `PINL`, nicht `PORTL`.',
-        'An Port L hängen nur 4 Taster (Bits 0 … 3). Die oberen 4 Bits von `PINL` sind unbeschaltet und können zufällig sein. Darum blendest du sie mit einer Maske aus: `uint8_t taster = PINL & 0x0F;`',
-        'Annahme auf dieser Seite: Taster und Schalter sind aktiv-high. Gedrückt bzw. eingeschaltet = 1, sonst 0.'
-      ] },
-      { code: ['#include <avr/io.h>     // Register: DDRA, PORTA, PINL, ...',
+      { p: 'In den Beispielen zeigen 8 LEDs an PORTA (und PORTB) den Wert einer Variablen an.' },
+      { code: ['#include <avr/io.h>',
                '#include <stdint.h>     // Typen: uint8_t, int16_t, ...',
                '',
                'int main(void) {',
-               '    DDRA = 0xFF;            // Port A: 8 Ausgänge (LEDs)',
-               '    DDRL = 0x00;            // Port L: Eingänge (4 Taster an PL0 … PL3)',
-               '    uint8_t zaehler = 0;    // 0 … 255',
+               '    DDRA = 0xFF;',
+               '    uint8_t zaehler = 0;     // 8 Bit ohne Vorzeichen: 0 … 255',
+               '    int8_t  differenz = -5;  // 8 Bit mit Vorzeichen: −128 … 127',
+               '    uint16_t messwert = 1023; // 16 Bit: 0 … 65\'535 (10-Bit-Sensor)',
                '    while (1) {',
-               '        uint8_t taster = PINL & 0x0F;  // 4 Taster lesen, Bits 4 … 7 ausblenden',
-               '        if (taster & 0x01) {           // Taster 0 gedrückt?',
-               '            zaehler++;                 // (ohne Entprellen, vereinfacht)',
-               '        }',
-               '        PORTA = zaehler;               // LEDs zeigen den Zähler binär',
+               '        zaehler++;            // nach 255 kommt wieder 0',
+               '        PORTA = zaehler;      // die LEDs zeigen den Wert binär',
                '    }',
                '}'] },
       { ul: [
-        'Ja/Nein-Werte (LED an, Schalter ein) speicherst du als `uint8_t` mit 0 und 1.',
+        'Ja/Nein-Werte (z.B. „LED an“) speicherst du als `uint8_t` mit 0 und 1.',
         'Weist du einer Ganzzahl eine Kommazahl zu, werden die Nachkommastellen abgeschnitten – nicht gerundet. Wie man Kommazahlen trotzdem speichert, lernst du in Level 5.'
       ] },
       { p: 'Warum nicht einfach `int`? Die klassischen C-Typen haben keine feste Grösse. Bei avr-gcc auf dem ATmega2560 ist ein `int` nur 16 Bit (2 Byte) gross, auf einem PC 32 Bit. Code, der am PC funktioniert, kann auf dem Mega plötzlich überlaufen. Mit `uint16_t` & Co. weisst du immer genau, was du bekommst.' },
-      { tip: '`#include <avr/io.h>` für die Register, `#include <stdint.h>` für die Typen. Ports sind 8 Bit breit → `uint8_t`. Einzige Ausnahme: `int main(void)` – so schreibt es der C-Standard vor.' }
+      { tip: '`#include <stdint.h>` bringt die Typen. Nimm immer `uint8_t`, `int16_t` & Co. Einzige Ausnahme: `int main(void)` – so schreibt es der C-Standard vor.' }
     ],
     fact: {
-      title: 'Der Mega hat mehr Beine als du denkst',
-      text: 'Der ATmega2560 hat 100 Pins und 86 davon sind frei programmierbare Ein-/Ausgänge, verteilt auf die Ports A bis L (einen Port I gibt es nicht). Zehn davon sind 8 Bit breit – passend zu einem `uint8_t` –, nur Port G hat 6 Pins: 10 × 8 + 6 = 86.'
+      title: '`int` ist nicht überall gleich gross',
+      text: 'Auf dem ATmega2560 hat `int` nur 16 Bit, auf deinem PC meist 32 Bit. Derselbe Code kann also auf dem PC funktionieren und auf dem Mikrocontroller überlaufen. Genau deshalb gibt es `<stdint.h>`: `int32_t` hat überall 32 Bit.'
     },
     tasks: [
       { type: 'choice',
         q: 'Was legt der Datentyp einer Variablen in C fest?',
         options: ['Wie viele Bits sie hat und wie diese Bits gedeutet werden',
                   'Nur den Namen der Variablen',
-                  'An welchem Port die Variable angeschlossen ist',
+                  'In welcher Datei die Variable stehen muss',
                   'Die Farbe im Code-Editor'],
         answer: 0,
         explain: 'Der Typ sagt dem Compiler zwei Dinge: wie viele Bits (bzw. Bytes) die Variable hat und wie die Bits zu lesen sind. Dieselben 8 Bits `11111111` sind z.B. 255 als `uint8_t`, aber −1 als `int8_t`.' },
@@ -122,27 +108,27 @@ var LEVELS = [
         why: [null, 'Das „u“ steht nicht für universal – und die Zahl zählt Bits, nicht Bytes.', 'Fast: Die Zahl im Namen zählt Bits, nicht Bytes.', 'Nein, mit Versionen hat das nichts zu tun.'],
         explain: '`uint16_t` = „unsigned integer“, englisch für Ganzzahl ohne Vorzeichen, 16 Bit, `_t` für type. Also 0 … 65\'535 in 2 Byte.' },
       { type: 'choice',
-        q: 'Wie breit ist ein Port-Register wie `PORTA` beim ATmega2560?',
-        options: ['8 Bit – ein Bit pro Pin, also 8 LEDs', '16 Bit', '32 Bit', '1 Bit'],
+        q: 'Welcher dieser Typen kann negative Zahlen speichern?',
+        options: ['`int16_t`', '`uint16_t`', '`uint8_t`', '`uint32_t`'],
         answer: 0,
-        why: [null, '16 Bit hat z.B. der Timer1 (`TCNT1`), aber kein Port.', 'Der ATmega2560 ist ein 8-Bit-Controller – Ports sind 8 Bit breit.', 'Ein Bit wäre nur ein einzelner Pin.'],
-        explain: 'Port A hat 8 Pins, darum sind `DDRx`, `PORTx` und `PINx` je 8 Bit breit. Der passende Typ dazu ist `uint8_t` (0 … 255).' },
+        why: [null, 'Das `u` am Anfang heisst: ohne Vorzeichen – nur 0 und positiv.', 'Das `u` am Anfang heisst: ohne Vorzeichen.', 'Das `u` am Anfang heisst: ohne Vorzeichen.'],
+        explain: 'Nur Typen ohne `u` haben ein Vorzeichen. `int16_t` reicht von −32\'768 bis 32\'767.' },
       { type: 'choice',
-        q: 'Die 4 Taster hängen an PL0 … PL3. Mit welchem Register liest du, welche gedrückt sind?',
-        options: ['`PINL`', '`PORTL`', '`DDRL`', '`TCNT1`'],
+        q: 'Welche Deklaration ist in C richtig geschrieben?',
+        options: ['`uint8_t zaehler = 0;`', '`zaehler uint8_t = 0;`', '`uint8_t = zaehler 0;`', '`uint8 zaehler = 0;`'],
         answer: 0,
-        why: [null, '`PORTL` schaltet bei Eingängen nur die Pull-up-Widerstände. Lesen liefert, was du hineingeschrieben hast – nicht den Taster.', '`DDRL` legt nur die Richtung fest (Eingang/Ausgang).', 'Das ist der Zähler von Timer1.'],
-        explain: 'Eingänge liest man über das PIN-Register: `DDRL = 0x00;` (alle Eingang), dann `uint8_t taster = PINL & 0x0F;` – die Maske blendet die unbeschalteten Bits 4 … 7 aus.' },
+        why: [null, 'Zuerst kommt der Typ, dann der Name.', 'Erst Typ, dann Name, dann `=` und der Startwert.', 'Der Typ heisst `uint8_t` – mit `_t` am Ende.'],
+        explain: 'Schema: Typ Name = Startwert; – also `uint8_t zaehler = 0;`.' },
       { type: 'yesno',
-        q: 'Auf dieser Seite gilt die Annahme „aktiv-high“. Ist Taster 3 gedrückt, ist dann Bit 3 von `PINL` gleich 1?',
-        answer: true,
-        explain: 'Aktiv-high heisst: gedrückt = 1, losgelassen = 0. (Viele echte Schaltungen sind aktiv-low mit Pull-up – dann wäre es umgekehrt. Hier legen wir aktiv-high fest.)' },
+        q: 'Hat der Typ `uint8_t` ein Vorzeichen?',
+        answer: false,
+        explain: 'Nein. Das `u` steht für „unsigned“ (ohne Vorzeichen): `uint8_t` speichert nur 0 … 255. Mit Vorzeichen wäre es `int8_t` (−128 … 127).' },
       { type: 'choice',
-        q: 'Welcher Typ passt am besten für den Wert, den du aus `PINC` (8 Schalter) liest?',
+        q: 'Welcher Typ passt am besten für einen Ja/Nein-Wert (0 oder 1), z.B. ob eine LED an sein soll?',
         options: ['`uint8_t`', '`int8_t`', '`uint32_t`', '`int64_t`'],
         answer: 0,
-        why: [null, 'Mit Vorzeichen würde Schalter 7 (Bit 7) als negativ gedeutet.', 'Funktioniert, ist aber 32 Bit breit – das Register hat nur 8 Bit.', 'Viel zu gross: 64 Bit für 8 Bits.'],
-        explain: '8 Bits ohne Vorzeichen = `uint8_t` (0 … 255). Genau so breit ist das Register `PINC`.' },
+        why: [null, 'Geht auch, aber ein Vorzeichen braucht ein Ja/Nein-Wert nicht.', 'Funktioniert, ist aber 4 Byte gross – für 0 oder 1 viel zu viel.', 'Viel zu gross: 8 Byte für 0 oder 1.'],
+        explain: 'Der kleinste Typ ohne Vorzeichen ist `uint8_t` (1 Byte). Für 0 und 1 reicht das locker.' },
       { type: 'choice',
         q: 'Was zeigen die LEDs an Port A nach diesen Zeilen?',
         code: ['DDRA = 0xFF;', 'uint8_t n = 7.9;', 'PORTA = n;'],
@@ -157,11 +143,11 @@ var LEVELS = [
         why: [null, 'So gross ist `int` auf einem PC – auf dem AVR nicht.', 'Nein, der C-Standard verlangt für `int` mindestens 16 Bit.', 'Nein, viel zu gross.'],
         explain: 'Auf dem AVR ist `int` nur 16 Bit (−32\'768 … 32\'767). Genau darum verwendet man Typen wie `int16_t` oder `int32_t`: Da steht die Grösse im Namen.' },
       { type: 'choice',
-        q: 'Welche Zeile macht die Register `DDRA`, `PORTA` und `PINL` bekannt?',
-        options: ['`#include <avr/io.h>`', '`#include <stdint.h>`', '`#include <math.h>`', '`#include <ports.h>`'],
+        q: 'Welche Zeile macht die Typen `uint8_t`, `int16_t` & Co. bekannt?',
+        options: ['`#include <stdint.h>`', '`#include <math.h>`', '`#include <types8.h>`', '`#include <int.h>`'],
         answer: 0,
-        why: [null, '`<stdint.h>` bringt die Typen wie `uint8_t`, aber keine Register.', '`<math.h>` hat mathematische Funktionen.', 'Diese Datei gibt es nicht.'],
-        explain: '`<avr/io.h>` definiert alle Register des Controllers (und bindet die Typen aus `<stdint.h>` schon mit ein). In den Beispielen steht `#include <stdint.h>` trotzdem dabei, damit klar ist, woher die Typen kommen.' }
+        why: [null, '`<math.h>` hat mathematische Funktionen, keine Typen.', 'Diese Datei gibt es nicht.', 'Diese Datei gibt es nicht.'],
+        explain: '`<stdint.h>` („standard integer“) definiert die Ganzzahltypen mit fester Grösse: `uint8_t` bis `int64_t`.' }
     ]
   },
   /* ------------------------------------------------------------ 2 */
@@ -180,7 +166,7 @@ var LEVELS = [
       { ul: [
         'Das `u` ändert die Grösse nicht: `uint16_t` und `int16_t` haben beide 16 Bit = 2 Byte. Nur die Deutung der Bits ist anders.',
         'Eine Hex-Ziffer steht für 4 Bit. Ein `uint8_t` hat darum 2 Hex-Ziffern (`0xFF`), ein `uint16_t` 4 (`0xFFFF`).',
-        'Ein Port hat 8 Bit = 1 Byte. Für einen `uint16_t` brauchst du zwei Ports, z.B. Port A (High-Byte) und Port B (Low-Byte).',
+        'Ein `uint16_t` besteht aus 2 Byte: dem High-Byte (Bits 15 … 8) und dem Low-Byte (Bits 7 … 0). Auf 8 LEDs passt nur eines davon – darum zeigen PORTA das High-Byte und PORTB das Low-Byte.',
         'Auf dem ATmega2560 hat `int` 16 Bit = 2 Byte, auf einem PC meist 32 Bit. Bei `int16_t` steht die Grösse im Namen.'
       ] },
       { code: ['uint16_t wert = 0x03E8;    // 16 Bit = 2 Byte = 4 Hex-Ziffern (1000)',
@@ -197,7 +183,7 @@ var LEVELS = [
       { type: 'number',
         q: 'Wie viele Bits hat ein Byte?',
         answer: '8', unit: 'Bits',
-        explain: '1 Byte = 8 Bits – genau so viele, wie ein Port LEDs hat.' },
+        explain: '1 Byte = 8 Bits – genau so viele hat ein `uint8_t`.' },
       { type: 'number',
         q: 'Wie viele Bytes hat ein `int32_t`?',
         answer: '4', unit: 'Bytes',
@@ -223,20 +209,20 @@ var LEVELS = [
         answer: true,
         explain: 'Ja, beide haben 16 Bit = 2 Byte. Der Unterschied ist nur die Deutung: `int16_t` −32\'768 … 32\'767, `uint16_t` 0 … 65\'535.' },
       { type: 'choice',
-        q: 'Ein `uint16_t` wird auf zwei Ports verteilt. Welche Bits landen mit `PORTA = wert >> 8;` auf Port A?',
+        q: 'Ein `uint16_t wert` wird in zwei Bytes zerlegt: `uint8_t hi = wert >> 8;`. Welche Bits von `wert` landen in `hi`?',
         options: ['Bits 15 … 8 (das High-Byte)', 'Bits 7 … 0 (das Low-Byte)', 'Nur Bit 8', 'Alle 16 Bits'],
         answer: 0,
-        why: [null, 'Das Low-Byte bekommst du mit `wert & 0xFF`.', '`>> 8` schiebt alle Bits um 8 Stellen nach rechts, nicht nur eines.', 'Ein Port hat nur 8 Bit – mehr passt nicht hinein.'],
-        explain: '`>> 8` schiebt die oberen 8 Bits nach unten. Port A zeigt dann das High-Byte (Bits 15 … 8), Port B mit `wert & 0xFF` das Low-Byte (Bits 7 … 0). 2 Byte = 2 Ports.' },
+        why: [null, 'Das Low-Byte bekommst du mit `wert & 0xFF`.', '`>> 8` schiebt alle Bits um 8 Stellen nach rechts, nicht nur eines.', 'Ein `uint8_t` hat nur 8 Bit – mehr passt nicht hinein.'],
+        explain: '`>> 8` schiebt die oberen 8 Bits nach unten. `hi` enthält dann das High-Byte (Bits 15 … 8), `wert & 0xFF` liefert das Low-Byte (Bits 7 … 0). 16 Bit = 2 Byte.' },
       { type: 'number',
         q: 'Wie viele Hex-Ziffern brauchst du, um jeden Wert eines `uint16_t` zu schreiben?',
         answer: '4', unit: 'Ziffern',
         hint: 'Eine Hex-Ziffer steht für 4 Bit.',
         explain: '16 Bit ÷ 4 = 4 Hex-Ziffern. Der grösste Wert ist `0xFFFF` = 65\'535.' },
       { type: 'number',
-        q: 'Jeder Port hat 8 LEDs (1 Byte). Wie viele Ports bräuchtest du, um alle Bits eines `uint32_t` gleichzeitig anzuzeigen?',
-        answer: '4', unit: 'Ports',
-        explain: '32 Bit ÷ 8 Bit pro Port = 4 Ports (32 LEDs). Für einen `uint16_t` reichen zwei: Port A und Port B.' }
+        q: 'Wie viele `uint8_t`-Variablen brauchst du, um alle Bits eines `uint32_t` zu speichern?',
+        answer: '4', unit: 'Variablen',
+        explain: '32 Bit ÷ 8 Bit pro `uint8_t` = 4. Für einen `uint16_t` reichen zwei (High- und Low-Byte).' }
     ]
   },
   /* ------------------------------------------------------------ 3 */
@@ -256,7 +242,7 @@ var LEVELS = [
         'Mit Vorzeichen gibt es darum einen negativen Wert mehr als positive.',
         'Ohne Vorzeichen ist der positive Bereich etwa doppelt so gross.',
         'Die Zahl n liest du direkt aus dem Namen ab: `int16_t` → n = 16.',
-        'Typische Werte am ATmega2560: der ADC misst mit 10 Bit (0 … 1023), Timer1 zählt mit 16 Bit (`TCNT1`).'
+        'Typische Werte: Ein 10-Bit-Sensorwert reicht von 0 bis 1023, ein 16-Bit-Zähler ohne Vorzeichen bis 65\'535.'
       ] },
       { tip: 'Bits aus dem Namen ablesen, dann Formel anwenden. Für grosse Typen hilft der Spickzettel.' }
     ],
@@ -269,25 +255,25 @@ var LEVELS = [
         q: 'Wie viele verschiedene Werte kann man mit n Bits darstellen?',
         options: ['n', '2 · n', '2ⁿ', 'n²'],
         answer: 2,
-        explain: 'Jedes Bit verdoppelt die Möglichkeiten: 1 Bit → 2, 2 Bits → 4, 8 Bits → 2⁸ = 256 Werte – so viele LED-Muster kann ein Port zeigen.' },
+        explain: 'Jedes Bit verdoppelt die Möglichkeiten: 1 Bit → 2, 2 Bits → 4, 8 Bits → 2⁸ = 256 Werte – so viele verschiedene Werte hat ein `uint8_t`.' },
       { type: 'number',
-        q: 'Was ist der grösste Wert eines `uint8_t` – also das, was `PORTA` maximal zeigen kann?',
+        q: 'Was ist der grösste Wert eines `uint8_t`?',
         answer: '255',
         hint: 'Formel: 2⁸ − 1',
-        explain: '2⁸ − 1 = 255 = `0xFF`: alle 8 LEDs leuchten.' },
+        explain: '2⁸ − 1 = 255 = `0xFF`: alle 8 Bits sind 1.' },
       { type: 'number',
         q: 'Was ist der kleinste Wert eines `int8_t`?',
         answer: '-128',
         hint: 'Formel: −2⁷',
         explain: '`int8_t`: −2⁷ = −128 bis 2⁷ − 1 = 127. Es gibt einen negativen Wert mehr als positive, weil die 0 bei den „positiven“ mitgezählt wird.' },
       { type: 'number',
-        q: 'Timer1 zählt in `TCNT1` mit 16 Bit ohne Vorzeichen. Bis zu welchem Wert kommt er, bevor er wieder bei 0 beginnt?',
+        q: 'Ein Zähler vom Typ `uint16_t` wird immer wieder um 1 erhöht. Bis zu welchem Wert kommt er, bevor er wieder bei 0 beginnt?',
         answer: '65535',
-        explain: '2¹⁶ − 1 = 65\'535. Danach läuft der Timer über und beginnt bei 0. Eine Kopie von `TCNT1` speicherst du in einem `uint16_t`.' },
+        explain: '2¹⁶ − 1 = 65\'535. Danach läuft der `uint16_t` über und beginnt wieder bei 0.' },
       { type: 'yesno',
-        q: 'Der ADC liefert Werte von 0 bis 1023. Passt das in einen `uint8_t`?',
+        q: 'Ein 10-Bit-Sensor liefert Messwerte von 0 bis 1023. Passt das in einen `uint8_t`?',
         answer: false,
-        explain: '`uint8_t` geht nur bis 255. Der 10-Bit-ADC braucht mindestens 10 Bit – der nächste passende Typ ist `uint16_t`.' },
+        explain: '`uint8_t` geht nur bis 255. 1023 braucht mindestens 10 Bit – der nächste passende Typ ist `uint16_t`.' },
       { type: 'yesno',
         q: 'Passt der Wert 40000 in einen `int16_t` (= `int` auf dem ATmega2560)?',
         answer: false,
@@ -313,16 +299,16 @@ var LEVELS = [
   {
     id: 'bits',
     title: 'Bits & LEDs',
-    desc: 'Bits umschalten, LEDs an PORTA sehen, Hex und Zweierkomplement.',
+    desc: 'Die Bits einer Variable umschalten, auf LEDs sehen, Hex und Zweierkomplement.',
     intro: [
-      { p: 'Jedes Bit hat eine Wertigkeit. Ganz rechts steht 1, nach links verdoppelt sich der Wert. Der Zahlenwert ist die Summe aller Bits, die auf 1 stehen. An Port A ist jedes Bit eine LED: Bit 7 links, Bit 0 rechts, 1 = LED leuchtet.' },
+      { p: 'Jedes Bit hat eine Wertigkeit. Ganz rechts steht 1, nach links verdoppelt sich der Wert. Der Zahlenwert ist die Summe aller Bits, die auf 1 stehen. Die LEDs zeigen die Bits einer Variable: Bit 7 links, Bit 0 rechts, 1 = LED leuchtet.' },
       { table: { head: ['Bit / LED', '7', '6', '5', '4', '3', '2', '1', '0'], rows: [
         ['Wert', '128', '64', '32', '16', '8', '4', '2', '1'],
-        ['`PORTA = 6;`', '0', '0', '0', '0', '0', '1', '1', '0']
+        ['`uint8_t x = 6;`', '0', '0', '0', '0', '0', '1', '1', '0']
       ] } },
-      { p: 'Hex-Schreibweise: Eine Hex-Ziffer (0 … 9, A … F) steht für genau 4 Bits. `0xFF` = `1111 1111` (alle LEDs an), `0x0F` = `0000 1111` (die rechten vier). Darum schreibt man Register-Werte meistens in Hex.' },
-      { p: 'Einzelne Bits prüfst du mit einer Maske: `1 << 3` ist eine 1 an Bit 3 (= 8). `PINL & (1 << 3)` ist nur dann nicht 0, wenn Taster 3 gedrückt ist.' },
-      { p: 'Ein 16-Bit-Wert passt nicht auf 8 LEDs. Verteile ihn: das obere Byte auf Port A, das untere auf Port B.' },
+      { p: 'Hex-Schreibweise: Eine Hex-Ziffer (0 … 9, A … F) steht für genau 4 Bits. `0xFF` = `1111 1111` (alle Bits 1), `0x0F` = `0000 1111` (die rechten vier). Darum schreibt man Bitmuster meistens in Hex.' },
+      { p: 'Einzelne Bits prüfst du mit einer Maske: `1 << 3` ist eine 1 an Bit 3 (= 8). `x & (1 << 3)` ist nur dann nicht 0, wenn Bit 3 von `x` gesetzt ist.' },
+      { p: 'Ein 16-Bit-Wert passt nicht auf 8 LEDs. Verteile ihn: das obere Byte auf PORTA, das untere auf PORTB.' },
       { code: ['uint16_t wert = 1000;',
                'DDRA = 0xFF; DDRB = 0xFF;',
                'PORTA = wert >> 8;     // High-Byte: Bits 15 … 8',
@@ -340,29 +326,29 @@ var LEVELS = [
     },
     tasks: [
       { type: 'bits', bits: 8, mode: 'ohneVZ', target: 13, leds: true,
-        q: 'Warm-up: Stelle die LEDs so ein, dass `PORTA = 13` ist. Klicke dazu die Bits an.',
-        explain: '13 = 8 + 4 + 1 → `00001101`: LED 3, 2 und 0 leuchten.' },
+        q: 'Warm-up: Stelle die Bits von `uint8_t x = 13;` ein. Klicke dazu die Bits an – die LEDs zeigen sie.',
+        explain: '13 = 8 + 4 + 1 → `00001101`: Bit 3, 2 und 0 sind 1.' },
       { type: 'bits', bits: 8, mode: 'ohneVZ', target: 200, leds: true,
-        q: 'Stelle die LEDs so ein, dass `PORTA = 200` ist.',
-        explain: '200 = 128 + 64 + 8 → `11001000` = `0xC8`: LED 7, 6 und 3 leuchten.' },
+        q: 'Stelle die Bits von `uint8_t x = 200;` ein.',
+        explain: '200 = 128 + 64 + 8 → `11001000` = `0xC8`: Bit 7, 6 und 3 sind 1.' },
       { type: 'choice',
-        q: 'Welche LEDs leuchten nach `PORTA = 0xA5;`?',
-        options: ['LED 7, 5, 2 und 0', 'LED 7, 6, 5 und 0', 'LED 3, 1 und 0', 'Alle 8 LEDs'],
+        q: 'Welche Bits von `uint8_t x = 0xA5;` sind 1?',
+        options: ['Bit 7, 5, 2 und 0', 'Bit 7, 6, 5 und 0', 'Bit 3, 1 und 0', 'Alle 8 Bits'],
         answer: 0,
         why: [null, 'Prüfe die erste Hex-Ziffer: A = `1010`, nicht `1110`.', 'Das wäre `0x0B`.', 'Das wäre `0xFF`.'],
         explain: 'A = `1010` (Bits 7 und 5), 5 = `0101` (Bits 2 und 0). Zusammen `10100101` = 165.' },
       { type: 'number',
-        q: 'Nach `PORTA = 0x3C;` leuchten einige LEDs. Welche Dezimalzahl zeigen sie?',
+        q: 'Welchen Dezimalwert hat `uint8_t x = 0x3C;`?',
         answer: '60',
         hint: '3 = 0011 (obere vier Bits), C = 1100 (untere vier Bits).',
-        explain: '`0x3C` = `00111100` = 32 + 16 + 8 + 4 = 60. Es leuchten LED 5, 4, 3 und 2.' },
+        explain: '`0x3C` = `00111100` = 32 + 16 + 8 + 4 = 60. Gesetzt sind Bit 5, 4, 3 und 2.' },
       { type: 'choice',
         q: 'Was prüft diese Bedingung?',
-        code: ['DDRL = 0x00;', 'uint8_t taster = PINL;', 'if (taster & (1 << 3)) {', '    PORTA = 0xFF;', '}'],
-        options: ['Ob Taster 3 gedrückt ist', 'Ob genau 3 Taster gedrückt sind', 'Ob Taster 0, 1 und 2 gedrückt sind', 'Ob `taster` grösser als 3 ist'],
+        code: ['uint8_t flags = 0x2C;', 'if (flags & (1 << 3)) {', '    PORTA = 0xFF;', '}'],
+        options: ['Ob Bit 3 von `flags` gesetzt ist', 'Ob `flags` gleich 3 ist', 'Ob die Bits 0, 1 und 2 gesetzt sind', 'Ob `flags` grösser als 3 ist'],
         answer: 0,
-        why: [null, 'Die Maske zählt nicht, sie prüft ein einzelnes Bit.', '`1 << 3` ist nur Bit 3 (= 8), nicht drei Bits.', '`&` ist ein Bit-UND, kein Vergleich.'],
-        explain: '`1 << 3` = `00001000`. Das UND lässt nur Bit 3 übrig: Ist Taster 3 gedrückt (1), ist das Ergebnis 8 → wahr.' },
+        why: [null, 'Die Maske vergleicht nicht, sie prüft ein einzelnes Bit.', '`1 << 3` ist nur Bit 3 (= 8), nicht drei Bits.', '`&` ist ein Bit-UND, kein Vergleich.'],
+        explain: '`1 << 3` = `00001000`. Das UND lässt nur Bit 3 übrig: `0x2C` = `00101100` hat Bit 3 gesetzt, das Ergebnis ist 8 → wahr.' },
       { type: 'bits', bits: 8, mode: 'mitVZ', target: -1, leds: true,
         q: 'Nach `int8_t x = -1; PORTA = x;` – welche Bits sind gesetzt? Stelle −1 als `int8_t` ein.',
         explain: 'Im Zweierkomplement ist −1 = `11111111` – alle 8 LEDs leuchten. Als `uint8_t` gelesen sind dieselben Bits 255.' },
@@ -373,7 +359,7 @@ var LEVELS = [
         q: 'Und jetzt den kleinsten `int8_t`-Wert.',
         explain: '`10000000` = −128. Nur das Vorzeichen-Bit ist gesetzt – nur LED 7 leuchtet.' },
       { type: 'bits', bits: 16, mode: 'ohneVZ', target: 1000, leds: true,
-        q: 'Der ADC misst 1000. Stelle 1000 als `uint16_t` ein – Port A zeigt das High-Byte, Port B das Low-Byte.',
+        q: 'Ein Sensor misst 1000. Stelle `uint16_t messwert = 1000;` ein – PORTA zeigt das High-Byte, PORTB das Low-Byte.',
         explain: '1000 = 512 + 256 + 128 + 64 + 32 + 8 → `00000011 11101000`. `PORTA = wert >> 8` zeigt 3, `PORTB = wert & 0xFF` zeigt 232.' }
     ]
   },
@@ -424,7 +410,7 @@ var LEVELS = [
     ],
     fact: {
       title: 'Patriot-Rakete: 0.1 ist nicht 0.1',
-      text: '1991 verfehlte eine Patriot-Abwehrrakete in Dhahran ihr Ziel; 28 Soldaten starben. Das System zählte die Zeit in Zehntelsekunden und multiplizierte mit 0.1 – gespeichert in einem 24-Bit-Festkommaregister. 0.1 ist binär aber ein unendlicher Bruch und wurde abgeschnitten. Nach 100 Stunden war die Uhr um etwa 0.34 Sekunden daneben. Mit einem dezimalen Faktor (Zeit als ganze Zehntelsekunden) wäre der Wert exakt geblieben.'
+      text: '1991 verfehlte eine Patriot-Abwehrrakete in Dhahran ihr Ziel; 28 Soldaten starben. Das System zählte die Zeit in Zehntelsekunden und multiplizierte mit 0.1 – gespeichert in einem 24-Bit-Festkommawert. 0.1 ist binär aber ein unendlicher Bruch und wurde abgeschnitten. Nach 100 Stunden war die Uhr um etwa 0.34 Sekunden daneben. Mit einem dezimalen Faktor (Zeit als ganze Zehntelsekunden) wäre der Wert exakt geblieben.'
     },
     tasks: [
       { type: 'choice',
@@ -509,8 +495,8 @@ var LEVELS = [
     },
     tasks: [
       { type: 'pickType',
-        q: 'Ein Zähler für Tastendrücke an Taster 0 – höchstens 200, nie negativ.',
-        code: '____ druecke = 0;',
+        q: 'Ein Rundenzähler für ein Spiel – höchstens 200, nie negativ.',
+        code: '____ runden = 0;',
         min: '0', max: '200',
         options: ['int8_t', 'uint8_t', 'uint16_t', 'int32_t'],
         explain: '`uint8_t` deckt 0 … 255 ab und braucht nur 1 Byte. `int8_t` reicht nur bis 127 – 200 würde überlaufen.' },
@@ -521,8 +507,8 @@ var LEVELS = [
         options: ['uint8_t', 'int8_t', 'int16_t', 'int32_t'],
         explain: '`int8_t` (−128 … 127) deckt −40 … 85 ab, mit nur 1 Byte. Ein Typ ohne Vorzeichen kann keine negativen Werte speichern.' },
       { type: 'pickType',
-        q: 'Ein Messwert vom 10-Bit-ADC: 0 bis 1023.',
-        code: '____ adc_wert = ADC;',
+        q: 'Ein Messwert von einem 10-Bit-Sensor: 0 bis 1023.',
+        code: '____ messwert = 1023;   // 10-Bit-Sensor',
         min: '0', max: '1023',
         options: ['uint8_t', 'int8_t', 'uint16_t', 'uint32_t'],
         explain: '1023 braucht 10 Bit, 8 Bit reichen nicht. `uint16_t` (bis 65\'535) passt mit 2 Byte.' },
@@ -573,12 +559,11 @@ var LEVELS = [
       { p: 'Jede Aufgabe hat zwei Schritte: Zuerst klickst du die fehlerhafte Zeile an, dann wählst du die passende Korrektur. Diese Fehler kommen auf dem ATmega2560 häufig vor:' },
       { ul: [
         'Überlauf: Ein Wert (z.B. ein Zähler) wird grösser als sein Typ erlaubt. Bei `uintN_t` springt er wieder auf 0; bei `intN_t` ist ein Überlauf undefiniertes Verhalten.',
-        'Port zu schmal: `PORTA` hat nur 8 Bit. Gespeichert wird nur das Low-Byte, also Wert mod 256.',
+        'Ziel zu schmal: Ein 16-Bit-Wert wird in einen `uint8_t` kopiert. Übrig bleibt nur das Low-Byte, also Wert mod 256.',
         'Unterlauf: Ein `uintN_t` kann nicht negativ werden – 0 − 1 ergibt den Maximalwert.',
         'Ohne Vorzeichen für negative Werte: Ein negativer Wert wird zu einer grossen positiven Zahl.',
         '`int` ist nur 16 Bit: Zwischenergebnisse wie `a * b` oder `60 * 1000` werden in 16 Bit gerechnet, nicht im Typ der Zielvariable.',
-        'Festkomma: Faktor vergessen, Zwischenergebnis zu klein, oder zuerst geteilt statt zuerst multipliziert.',
-        'Bonus (kein Typfehler): Eingänge liest man über `PINx`, nicht über `PORTx`.'
+        'Festkomma: Faktor vergessen, Zwischenergebnis zu klein, oder zuerst geteilt statt zuerst multipliziert.'
       ] },
       { code: ['#define F_CPU 16000000UL    // 16 MHz, für _delay_ms()',
                '#include <avr/io.h>',
@@ -592,14 +577,14 @@ var LEVELS = [
     },
     tasks: [
       { type: 'findBug',
-        q: 'Die LEDs sollen den Punktestand 300 anzeigen – sie zeigen aber 44. Welche Zeile ist schuld?',
-        code: ['#include <avr/io.h>', '#include <stdint.h>', '', 'int main(void) {', '    DDRA = 0xFF; DDRB = 0xFF;', '    uint16_t punkte = 300;', '    while (1) {', '        PORTA = punkte;', '    }', '}'],
-        bugLines: [7],
-        lineHint: 'Der Wert 300 ist korrekt gespeichert. Wie viele Bits hat das Ziel?',
-        fixes: ['Auf zwei Ports verteilen: `PORTA = punkte >> 8; PORTB = punkte & 0xFF;`', '`uint32_t punkte = 300;`', '`PORTA = (uint16_t)punkte;`', '`int16_t punkte = 300;`'],
+        q: 'Die Kopie `kopie` soll den Punktestand 300 enthalten – die LEDs zeigen aber 0 (High-Byte) und 44 (Low-Byte). Welche Zeile ist schuld?',
+        code: ['#include <avr/io.h>', '#include <stdint.h>', '', 'int main(void) {', '    DDRA = 0xFF; DDRB = 0xFF;', '    uint16_t punkte = 300;', '    uint8_t kopie = punkte;', '    PORTA = kopie >> 8;', '    PORTB = kopie & 0xFF;', '    while (1) { }', '}'],
+        bugLines: [6],
+        lineHint: 'Der Wert 300 ist in `punkte` korrekt gespeichert. Wie viele Bits hat die Kopie?',
+        fixes: ['`uint16_t kopie = punkte;`', '`uint8_t kopie = (uint16_t)punkte;`', '`int8_t kopie = punkte;`', '`uint8_t kopie = punkte + 0;`'],
         fix: 0,
-        why: [null, 'Der Typ von `punkte` ist nicht das Problem – `PORTA` bleibt 8 Bit breit.', 'Der Cast ändert nichts: `PORTA` kann trotzdem nur 8 Bit aufnehmen.', 'Auch mit Vorzeichen bleibt `PORTA` 8 Bit breit.'],
-        explain: '`PORTA` hat nur 8 Bit. Gespeichert wird 300 mod 256 = 44. Ein 16-Bit-Wert braucht 16 LEDs: High-Byte auf Port A (1), Low-Byte auf Port B (44) – zusammen 1 × 256 + 44 = 300.' },
+        why: [null, 'Der Cast ändert nichts: Das Ziel `kopie` bleibt 8 Bit breit.', 'Auch mit Vorzeichen hat `kopie` nur 8 Bit.', 'Gerechnet wird zwar in `int`, gespeichert aber trotzdem in 8 Bit.'],
+        explain: 'Ein `uint8_t` hat nur 8 Bit. Gespeichert wird 300 mod 256 = 44, das High-Byte geht verloren. Mit `uint16_t` zeigen die LEDs 1 und 44 – zusammen 1 × 256 + 44 = 300.' },
       { type: 'findBug',
         q: 'LED 0 soll jede Sekunde umschalten – sie schaltet aber nie. Welche Zeile ist schuld?',
         code: ['#define F_CPU 16000000UL', '#include <avr/io.h>', '#include <util/delay.h>', '#include <stdint.h>', '', 'int main(void) {', '    DDRA = 0xFF;', '    uint8_t ms = 0;', '    while (1) {', '        _delay_ms(1);', '        ms++;', '        if (ms == 1000) {', '            PORTA ^= 0x01;', '            ms = 0;', '        }', '    }', '}'],
@@ -610,23 +595,23 @@ var LEVELS = [
         why: [null, '`int8_t` geht sogar nur bis 127.', 'Auch `>=` wird nie wahr, solange `ms` höchstens 255 ist.', 'Der Startwert ändert nichts am Bereich.'],
         explain: 'Ein `uint8_t` geht nur bis 255, danach springt er auf 0. `ms == 1000` ist nie wahr. Mit `uint16_t` (bis 65\'535) klappt es.' },
       { type: 'findBug',
-        q: 'Das Poti steht auf Maximum (ADC = 1023). Port A bleibt aber dunkel und Port B zeigt nur 255. Wo liegt der Fehler?',
-        code: ['#include <avr/io.h>', '#include <stdint.h>', '', 'int main(void) {', '    DDRA = 0xFF; DDRB = 0xFF;', '    ADMUX = (1 << REFS0);                  // Referenz AVCC, Kanal 0', '    ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);', '    while (1) {', '        ADCSRA |= (1 << ADSC);             // Messung starten', '        while (ADCSRA & (1 << ADSC)) { }   // warten', '        uint8_t wert = ADC;                // 0 … 1023', '        PORTA = wert >> 8;', '        PORTB = wert & 0xFF;', '    }', '}'],
-        bugLines: [10],
-        lineHint: 'Der ADC hat 10 Bit. Wie viele Bits hat die Variable, die den Wert aufnimmt?',
-        fixes: ['`uint16_t wert = ADC;`', '`int8_t wert = ADC;`', '`PORTA = wert >> 2;`', '`uint8_t wert = ADCH;`'],
+        q: 'Der Sensor liefert seinen Maximalwert 1023. PORTA (High-Byte) bleibt aber dunkel und PORTB zeigt nur 255. Wo liegt der Fehler?',
+        code: ['#include <avr/io.h>', '#include <stdint.h>', '', 'uint16_t sensor_lesen(void);   // liefert 0 … 1023', '', 'int main(void) {', '    DDRA = 0xFF; DDRB = 0xFF;', '    while (1) {', '        uint8_t wert = sensor_lesen();', '        PORTA = wert >> 8;', '        PORTB = wert & 0xFF;', '    }', '}'],
+        bugLines: [8],
+        lineHint: 'Der Sensorwert braucht 10 Bit. Wie viele Bits hat die Variable, die ihn aufnimmt?',
+        fixes: ['`uint16_t wert = sensor_lesen();`', '`int8_t wert = sensor_lesen();`', '`PORTA = wert >> 2;`', '`uint8_t wert = sensor_lesen() >> 8;`'],
         fix: 0,
-        why: [null, 'Noch kleiner: nur bis 127.', 'Dann fehlen die oberen Bits trotzdem – sie sind schon beim Speichern verloren.', '`ADCH` allein liefert nur die oberen Bits des Ergebnisses, nicht den ganzen Wert.'],
-        explain: '`ADC` liefert 0 … 1023 (10 Bit). Ein `uint8_t` behält nur das Low-Byte: 1023 mod 256 = 255, das High-Byte ist 0. Mit `uint16_t` zeigt Port A 3 und Port B 255.' },
+        why: [null, 'Noch kleiner: nur bis 127.', 'Dann fehlen die oberen Bits trotzdem – sie sind schon beim Speichern verloren.', 'Dann bleiben nur die oberen 2 Bits übrig (0 … 3), der Rest geht verloren.'],
+        explain: 'Der Sensor liefert 0 … 1023 (10 Bit). Ein `uint8_t` behält nur das Low-Byte: 1023 mod 256 = 255, das High-Byte ist 0. Mit `uint16_t` zeigt PORTA 3 und PORTB 255.' },
       { type: 'findBug',
-        q: 'Bonus (kein Typfehler): Die LEDs sollen zeigen, welche Taster gedrückt sind – sie reagieren aber gar nicht. Welche Zeile?',
-        code: ['#include <avr/io.h>', '#include <stdint.h>', '', 'int main(void) {', '    DDRA = 0xFF;            // LEDs', '    DDRL = 0x00;            // Taster', '    while (1) {', '        uint8_t taster = PORTL;', '        PORTA = taster;', '    }', '}'],
+        q: 'Ein Besucherzähler soll bis 200 zählen und dann wieder bei 0 beginnen. Im Debugger springt `besucher` aber nach 127 auf −128, und 200 wird nie erreicht. Welche Zeile?',
+        code: ['#define F_CPU 16000000UL', '#include <avr/io.h>', '#include <util/delay.h>', '#include <stdint.h>', '', 'int main(void) {', '    DDRA = 0xFF;', '    int8_t besucher = 0;      // 0 … 200', '    while (1) {', '        besucher++;', '        PORTA = besucher;', '        _delay_ms(500);', '        if (besucher == 200) {', '            besucher = 0;', '        }', '    }', '}'],
         bugLines: [7],
-        lineHint: 'Welches Register liefert den Zustand der Eingangs-Pins?',
-        fixes: ['`uint8_t taster = PINL & 0x0F;`', '`uint8_t taster = DDRL;`', '`uint16_t taster = PORTL;`', '`DDRL = 0xFF;`'],
+        lineHint: 'Welchen Wertebereich hat der Typ von `besucher`?',
+        fixes: ['`uint8_t besucher = 0;`', '`int8_t besucher = 1;`', '`if (besucher >= 200) {`', '`int8_t besucher = -128;`'],
         fix: 0,
-        why: [null, '`DDRL` enthält nur die Richtung (hier 0x00).', 'Der Typ ist nicht das Problem – das Register ist das falsche.', 'Dann wären die Taster-Pins Ausgänge.'],
-        explain: 'Das ist kein Typfehler, sondern ein Register-Fehler: `PORTL` enthält, was du hineingeschrieben hast (bei Eingängen die Pull-up-Einstellung). Den Zustand der Pins liefert `PINL`.' },
+        why: [null, 'Der Startwert ändert nichts am Bereich: Ein `int8_t` geht nur bis 127.', 'Auch `>=` wird nie wahr – ein `int8_t` ist nie grösser als 127.', 'Dann zählt er zwar länger, erreicht 200 aber trotzdem nie.'],
+        explain: 'Ein `int8_t` reicht nur von −128 bis 127. 127 + 1 = 128 passt nicht hinein, avr-gcc speichert −128. `besucher == 200` ist darum nie wahr. Mit `uint8_t` (0 … 255) passt 200.' },
       { type: 'findBug',
         q: 'Ein Lauflicht soll von LED 7 nach LED 0 laufen und dann von vorne beginnen. Es hängt aber nach LED 0. Welche Zeile?',
         code: ['#define F_CPU 16000000UL', '#include <avr/io.h>', '#include <util/delay.h>', '#include <stdint.h>', '', 'int main(void) {', '    DDRA = 0xFF;', '    while (1) {', '        for (uint8_t i = 7; i >= 0; i--) {', '            PORTA = 1 << i;', '            _delay_ms(100);', '        }', '    }', '}'],
@@ -664,14 +649,14 @@ var LEVELS = [
         why: [null, 'Der Typ ist nicht das Problem, sondern der Faktor.', 'Der Typ ist nicht das Problem, sondern der Faktor.', 'Das macht es noch schlimmer.'],
         explain: 'Die Temperatur ist in Zehntelgrad gespeichert (Faktor 10), die Grenze aber nicht. 25 bedeutet 2.5 °C. Richtig: 25.0 × 10 = 250.' },
       { type: 'findBug',
-        q: 'Die Spannung am ADC soll in mV (0 … 5000) angezeigt werden. Sie ist aber fast immer 0 – nur bei ADC = 1023 genau 5000. Welche Zeile?',
-        code: ['#include <avr/io.h>', '#include <stdint.h>', '', 'int main(void) {', '    DDRA = 0xFF; DDRB = 0xFF;', '    while (1) {', '        uint16_t adc = ADC;                // 0 … 1023', '        uint16_t mv = adc / 1023 * 5000;', '        PORTA = mv >> 8;', '        PORTB = mv & 0xFF;', '    }', '}'],
-        bugLines: [7],
-        lineHint: 'Was ergibt `adc / 1023` als Ganzzahldivision, wenn adc kleiner als 1023 ist?',
-        fixes: ['`uint16_t mv = (uint32_t)adc * 5000 / 1023;`', '`uint16_t mv = adc * 5000 / 1023;`', '`uint32_t mv = adc / 1023 * 5000;`', '`uint16_t mv = adc / (1023 * 5000);`'],
+        q: 'Ein Sensorwert (0 … 1023) soll in mV (0 … 5000) umgerechnet werden. Das Ergebnis ist aber fast immer 0 – nur bei 1023 genau 5000. Welche Zeile?',
+        code: ['#include <avr/io.h>', '#include <stdint.h>', '', 'uint16_t sensor_lesen(void);   // liefert 0 … 1023', '', 'int main(void) {', '    DDRA = 0xFF; DDRB = 0xFF;', '    while (1) {', '        uint16_t roh = sensor_lesen();', '        uint16_t mv = roh / 1023 * 5000;', '        PORTA = mv >> 8;', '        PORTB = mv & 0xFF;', '    }', '}'],
+        bugLines: [9],
+        lineHint: 'Was ergibt `roh / 1023` als Ganzzahldivision, wenn `roh` kleiner als 1023 ist?',
+        fixes: ['`uint16_t mv = (uint32_t)roh * 5000 / 1023;`', '`uint16_t mv = roh * 5000 / 1023;`', '`uint32_t mv = roh / 1023 * 5000;`', '`uint16_t mv = roh / (1023 * 5000);`'],
         fix: 0,
-        why: [null, 'Reihenfolge richtig, aber `adc * 5000` wird auf dem ATmega in 16 Bit gerechnet und läuft über.', 'Das Ziel ist nicht das Problem – geteilt wird immer noch zuerst.', 'Dann ist das Ergebnis immer 0.'],
-        explain: 'Ganzzahldivision zuerst: `adc / 1023` ist 0 für alle Werte unter 1023. Zuerst multiplizieren, dann teilen – und weil 1023 × 5000 = 5\'115\'000 nicht in 16 Bit passt, in 32 Bit rechnen.' }
+        why: [null, 'Reihenfolge richtig, aber `roh * 5000` wird auf dem ATmega in 16 Bit gerechnet und läuft über.', 'Das Ziel ist nicht das Problem – geteilt wird immer noch zuerst.', 'Dann ist das Ergebnis immer 0.'],
+        explain: 'Ganzzahldivision zuerst: `roh / 1023` ist 0 für alle Werte unter 1023. Zuerst multiplizieren, dann teilen – und weil 1023 × 5000 = 5\'115\'000 nicht in 16 Bit passt, in 32 Bit rechnen.' }
     ]
   },
   /* ------------------------------------------------------------ 8 */
@@ -785,8 +770,8 @@ var LEVELS = [
       { ul: [
         'Namensschema: `u` = ohne Vorzeichen, Zahl = Bits, z.B. `int16_t` = mit Vorzeichen, 16 Bit = 2 Byte.',
         'Wertebereich mit n Bits: ohne Vorzeichen 0 … 2ⁿ − 1, mit Vorzeichen −2ⁿ⁻¹ … 2ⁿ⁻¹ − 1.',
-        'ATmega2560: Ports 8 Bit (`DDRx`, `PORTx`, `PINx`), 4 Taster an PL0 … PL3 (`PINL & 0x0F`), ADC 10 Bit, Timer1 16 Bit, `int` = 16 Bit.',
-        'LEDs: `PORTA` übernimmt nur 8 Bit (Wert mod 256). 16 Bit: `PORTA = wert >> 8; PORTB = wert & 0xFF;`',
+        'ATmega2560: 8-Bit-Controller ohne FPU, `int` = 16 Bit.',
+        'High- und Low-Byte: `hi = wert >> 8; lo = wert & 0xFF;` – ein `uint8_t` behält nur 8 Bit (Wert mod 256).',
         'Zweierkomplement: Das oberste Bit zählt negativ (bei 8 Bit −128).',
         'Festkomma: Wert × Faktor als Ganzzahl. Typ nach dem skalierten Bereich wählen. Multiplikation in grösserem Typ, zuerst multiplizieren, dann teilen.',
         'Zwischenergebnisse: werden mindestens in `int` (16 Bit) gerechnet – nicht im Typ der Zielvariable.',
@@ -798,16 +783,16 @@ var LEVELS = [
       { type: 'yesno',
         q: 'Passt der Wert 300 in einen `uint8_t`?',
         answer: false,
-        explain: '`uint8_t` geht nur bis 255. Gespeichert würde 300 − 256 = 44 – genau das würden die LEDs bei `PORTA = 300;` zeigen.' },
+        explain: '`uint8_t` geht nur bis 255. Gespeichert würde 300 − 256 = 44.' },
       { type: 'number',
         q: 'Was ist der grösste Wert eines `int16_t`?',
         answer: '32767',
         explain: '2¹⁵ − 1 = 32\'767 – so weit geht auch ein `int` auf dem ATmega2560.' },
       { type: 'choice',
-        q: 'Welche LEDs leuchten nach `PORTA = 0x81;`?',
-        options: ['LED 7 und LED 0', 'LED 8 und LED 1', 'LED 0 bis LED 7', 'Nur LED 1'],
+        q: 'Welche Bits von `uint8_t x = 0x81;` sind 1?',
+        options: ['Bit 7 und Bit 0', 'Bit 8 und Bit 1', 'Bit 0 bis Bit 7', 'Nur Bit 1'],
         answer: 0,
-        why: [null, 'Die LEDs heissen wie die Bits: 0 bis 7.', 'Das wäre `0xFF`.', 'Das wäre `0x02`.'],
+        why: [null, 'Die Bits eines `uint8_t` sind von 0 bis 7 nummeriert.', 'Das wäre `0xFF`.', 'Das wäre `0x02`.'],
         explain: '8 = `1000` (Bit 7), 1 = `0001` (Bit 0) → `10000001` = 129.' },
       { type: 'bits', bits: 8, mode: 'mitVZ', target: -100, leds: true,
         q: 'Stelle −100 als `int8_t` ein.',
@@ -858,7 +843,7 @@ var RANKS = [
   { min: 0,    name: 'Bit-Neuling' },
   { min: 0.1,  name: 'Byte-Sammler' },
   { min: 0.3,  name: 'Overflow-Jäger' },
-  { min: 0.55, name: 'Register-Profi' },
+  { min: 0.55, name: 'Festkomma-Profi' },
   { min: 0.8,  name: 'Typ-Meister' },
   { min: 1,    name: 'AVR-Legende' }
 ];
@@ -923,40 +908,41 @@ var BIT_SAYS = {
 /* Sprueche, wenn man Bit anstupst. Du-Form, Schweizer Schreibweise. */
 var BIT_POKE = [
   'Hey, das kitzelt! Zum Glück bin ich gegen Bitflips versiegelt.',
-  'Wusstest du? Ein Byte hat 8 Bit – genau so viele LEDs hat Port A.',
-  '`uint8_t` geht von 0 bis 255. Mehr passt nicht in ein Port-Register.',
+  'Wusstest du? Ein Byte hat 8 Bit – genau so viele hat ein `uint8_t`.',
+  '`uint8_t` geht von 0 bis 255. Mehr passt nicht in 8 Bit.',
   'Ich ticke mit 16 MHz. Das sind 16 Millionen Takte pro Sekunde – und ich langweile mich trotzdem nie.',
   'Ich habe keine FPU. Kommazahlen rechne ich lieber in Millivolt und Zehntelgrad.',
   'Ein Nibble sind 4 Bit. Klingt nach Znüni, ist aber eine Hex-Ziffer.',
   'Wenn ein `uint8_t` bei 255 noch eins drauflegt, fängt er wieder bei 0 an. Kreislauf des Lebens.',
   'Bei mir ist `int` nur 16 Bit. Darum schreibe ich lieber gleich `int16_t`.',
-  'Psst: Taster liest man über `PINL`, nicht über `PORTL`. Mein Lieblingsfakt.',
+  'Psst: `int16_t` und `uint16_t` sind gleich gross. Nur die Deutung der Bits ist anders. Mein Lieblingsfakt.',
   '`int8_t` −1 und `uint8_t` 255 sind dieselben 8 Bits. Nur der Typ entscheidet, was sie bedeuten.'
 ];
 
 /* ---------- Simulator: Beispielprogramme (Daten fuer js/sim.js) ---------- */
+/* Es geht um Variablentypen. Die LEDs an PORTA/PORTB zeigen nur den Wert einer Variable an. */
 var SIM_EXAMPLES = [
   {
-    title: 'LEDs einschalten',
-    text: 'Das kleinste Programm: `DDRA = 0xFF;` macht alle 8 Pins von Port A zu Ausgängen, dann legt `PORTA` fest, welche LEDs leuchten. Probier andere Muster, z.B. `0b11110000` – oder lösch die DDRA-Zeile und schau, was passiert.',
+    title: 'Eine Variable auf den LEDs',
+    text: 'Eine `uint8_t`-Variable hat 8 Bit – die LEDs an PORTA zeigen sie an. Probier andere Werte, z.B. `200`, `0xF0` oder `255`, und schau in die Variablen-Tabelle. Was passiert bei `256`?',
     code: [
       '#include <avr/io.h>',
       '#include <stdint.h>',
       '',
       'int main(void)',
       '{',
-      '    DDRA = 0xFF;          // alle 8 Pins von Port A als Ausgang',
-      '    PORTA = 0b10101010;   // jede zweite LED an',
+      '    DDRA = 0xFF;',
+      '    uint8_t wert = 0b10101010;   // 170',
+      '    PORTA = wert;                // die LEDs zeigen die 8 Bits',
       '',
       '    while (1)',
       '    {',
-      '        // nichts mehr zu tun – die LEDs bleiben an',
       '    }',
       '}'
     ].join('\n')
   },
   {
-    title: 'Binärzähler auf PORTA',
+    title: 'Binärzähler: uint8_t zählt hoch',
     text: 'Ein `uint8_t` zählt hoch und wird binär auf den LEDs angezeigt. Nach 255 kommt wieder 0 – der Überlauf ist bei Typen ohne Vorzeichen genau festgelegt.',
     code: [
       '#define F_CPU 16000000UL',
@@ -979,8 +965,8 @@ var SIM_EXAMPLES = [
     ].join('\n')
   },
   {
-    title: 'Lauflicht',
-    text: 'Ein einzelnes Bit wird mit `<< 1` nach links geschoben. Wenn es aus dem `uint8_t` herausfällt, ist das Muster 0 – dann geht es wieder bei LED 0 los.',
+    title: 'Overflow-Demo: uint8_t läuft über',
+    text: 'Der Wert startet bei 250. Schau in die Variablen-Tabelle und die Meldungen: Bei 255 + 1 = 256 passt das Ergebnis nicht mehr in 8 Bit, gespeichert wird 0. Ändere den Typ auf `int8_t` und den Start auf 120 – was passiert dann?',
     code: [
       '#define F_CPU 16000000UL',
       '#include <avr/io.h>',
@@ -990,66 +976,35 @@ var SIM_EXAMPLES = [
       'int main(void)',
       '{',
       '    DDRA = 0xFF;',
-      '    uint8_t muster = 0x01;',
+      '    uint8_t wert = 250;',
       '',
       '    while (1)',
       '    {',
-      '        PORTA = muster;',
-      '        _delay_ms(150);',
-      '        muster = muster << 1;   // eine Stelle nach links',
-      '        if (muster == 0)',
-      '        {',
-      '            muster = 0x01;      // wieder bei LED 0 anfangen',
-      '        }',
+      '        PORTA = wert;',
+      '        _delay_ms(400);',
+      '        wert = wert + 1;   // 255 + 1 = 256 passt nicht -> 0',
       '    }',
       '}'
     ].join('\n')
   },
   {
-    title: 'Taster schaltet LEDs',
-    text: 'Halte Taster L0 gedrückt: Solange `PINL` Bit 0 = 1 ist, leuchten alle LEDs an PORTA. Eingänge liest man über `PINL`, nicht über `PORTL`.',
+    title: 'int8_t und uint8_t: gleiche Bits',
+    text: 'Dieselben 8 Bits, zwei Typen: PORTA zeigt `s` (`int8_t`), PORTB zeigt `u` (`uint8_t`). Die LEDs sind gleich – in der Variablen-Tabelle steht aber −100 und 156. Probier andere negative Werte.',
     code: [
       '#include <avr/io.h>',
       '#include <stdint.h>',
       '',
       'int main(void)',
       '{',
-      '    DDRA = 0xFF;   // LEDs: Ausgang',
-      '    DDRL = 0x00;   // Taster: Eingang',
+      '    DDRA = 0xFF;',
+      '    DDRB = 0xFF;',
+      '    int8_t  s = -100;   // mit Vorzeichen',
+      '    uint8_t u = s;      // dieselben Bits, ohne Vorzeichen: 156',
+      '    PORTA = s;',
+      '    PORTB = u;',
       '',
       '    while (1)',
       '    {',
-      '        if (PINL & (1 << PL0))   // Taster L0 gedrückt?',
-      '        {',
-      '            PORTA = 0xFF;',
-      '        }',
-      '        else',
-      '        {',
-      '            PORTA = 0x00;',
-      '        }',
-      '    }',
-      '}'
-    ].join('\n')
-  },
-  {
-    title: 'Schalter → LEDs spiegeln',
-    text: 'Die 8 Schalter an Port C werden gelesen und 1:1 auf PORTB ausgegeben. Leg ein paar Schalter um!',
-    code: [
-      '#define F_CPU 16000000UL',
-      '#include <avr/io.h>',
-      '#include <util/delay.h>',
-      '#include <stdint.h>',
-      '',
-      'int main(void)',
-      '{',
-      '    DDRB = 0xFF;   // LEDs an Port B: Ausgang',
-      '    DDRC = 0x00;   // Schalter an Port C: Eingang',
-      '',
-      '    while (1)',
-      '    {',
-      '        uint8_t schalter = PINC;',
-      '        PORTB = schalter;',
-      '        _delay_ms(10);',
       '    }',
       '}'
     ].join('\n')
@@ -1080,31 +1035,8 @@ var SIM_EXAMPLES = [
     ].join('\n')
   },
   {
-    title: 'Overflow-Demo: uint8_t läuft über',
-    text: 'Der Wert startet bei 250. Schau in die Variablen-Tabelle und die Meldungen: Bei 255 + 1 = 256 passt das Ergebnis nicht mehr in 8 Bit, gespeichert wird 0. Ändere den Typ auf `int8_t` und den Start auf 120 – was passiert dann?',
-    code: [
-      '#define F_CPU 16000000UL',
-      '#include <avr/io.h>',
-      '#include <util/delay.h>',
-      '#include <stdint.h>',
-      '',
-      'int main(void)',
-      '{',
-      '    DDRA = 0xFF;',
-      '    uint8_t wert = 250;',
-      '',
-      '    while (1)',
-      '    {',
-      '        PORTA = wert;',
-      '        _delay_ms(400);',
-      '        wert = wert + 1;   // 255 + 1 = 256 passt nicht -> 0',
-      '    }',
-      '}'
-    ].join('\n')
-  },
-  {
-    title: 'Festkomma: ADC → Millivolt',
-    text: 'Schieb den ADC-Regler. Der Rohwert 0–1023 wird ohne Kommazahlen in Millivolt umgerechnet. Wichtig: `1023 * 5000` passt nicht in 16 Bit – darum der Cast auf `uint32_t`. PORTA zeigt die ganzen Volt, PORTB die Zehntel.',
+    title: 'Typumwandlung 16 → 8 Bit',
+    text: '`gross` ist ein `uint16_t`, `klein` ein `uint8_t`. Bei jeder Zuweisung `klein = gross;` bleiben nur die unteren 8 Bit übrig. PORTA zeigt das High-Byte von `gross`, PORTB zeigt `klein` – vergleiche mit der Variablen-Tabelle.',
     code: [
       '#define F_CPU 16000000UL',
       '#include <avr/io.h>',
@@ -1115,56 +1047,109 @@ var SIM_EXAMPLES = [
       '{',
       '    DDRA = 0xFF;',
       '    DDRB = 0xFF;',
+      '    uint16_t gross = 200;',
+      '    uint8_t klein;',
       '',
       '    while (1)',
       '    {',
-      '        uint16_t roh = ADC;                          // 0 … 1023 (Schieberegler)',
+      '        klein = gross;          // nur das Low-Byte passt hinein',
+      '        PORTA = gross >> 8;',
+      '        PORTB = klein;',
+      '        gross = gross + 50;',
+      '        _delay_ms(500);',
+      '    }',
+      '}'
+    ].join('\n')
+  },
+  {
+    title: 'Festkomma: Sensorwert → Millivolt',
+    text: 'Ein 10-Bit-Sensorwert (0 … 1023) wird ohne Kommazahlen in Millivolt umgerechnet. Wichtig: `1023 * 5000` passt nicht in 16 Bit – darum der Cast auf `uint32_t`. PORTA zeigt die ganzen Volt, PORTB die Zehntel.',
+    code: [
+      '#define F_CPU 16000000UL',
+      '#include <avr/io.h>',
+      '#include <util/delay.h>',
+      '#include <stdint.h>',
+      '',
+      'int main(void)',
+      '{',
+      '    DDRA = 0xFF;',
+      '    DDRB = 0xFF;',
+      '    uint16_t roh = 0;                                // 10-Bit-Sensorwert: 0 … 1023',
+      '',
+      '    while (1)',
+      '    {',
       '        uint16_t mv = (uint32_t)roh * 5000 / 1023;   // Festkomma: Millivolt',
       '        uint8_t volt = mv / 1000;                    // ganze Volt',
       '        uint8_t zehntel = (mv % 1000) / 100;         // erste Nachkommastelle',
       '        PORTA = volt;',
       '        PORTB = zehntel;',
-      '        _delay_ms(100);',
+      '        roh = roh + 93;',
+      '        if (roh > 1023)',
+      '        {',
+      '            roh = 0;',
+      '        }',
+      '        _delay_ms(300);',
+      '    }',
+      '}'
+    ].join('\n')
+  },
+  {
+    title: 'Falscher Typ: Multiplikation in 16 Bit',
+    text: '4800 mV × 250 mA = 1\'200\'000 µW. `falsch` wird in 16 Bit gerechnet (auf dem ATmega ist `int` nur 16 Bit) und läuft über, `richtig` castet vorher auf `uint32_t`. Schau in die Meldungen und die Variablen-Tabelle.',
+    code: [
+      '#include <avr/io.h>',
+      '#include <stdint.h>',
+      '',
+      'int main(void)',
+      '{',
+      '    DDRA = 0xFF;',
+      '    DDRB = 0xFF;',
+      '    uint16_t spannung_mv = 4800;',
+      '    uint16_t strom_ma = 250;',
+      '    uint32_t falsch = spannung_mv * strom_ma;             // 16 Bit: Überlauf',
+      '    uint32_t richtig = (uint32_t)spannung_mv * strom_ma;  // 32 Bit: 1200000',
+      '    uint16_t leistung_mw = richtig / 1000;                // 1200 mW',
+      '    PORTA = leistung_mw >> 8;',
+      '    PORTB = leistung_mw & 0xFF;',
+      '',
+      '    while (1)',
+      '    {',
       '    }',
       '}'
     ].join('\n')
   }
 ];
 
-/* Simulator-Challenges: phases = Eingaben fuer ms Millisekunden, danach optional expect (sichtbare LEDs = PORTx & DDRx) */
+/* Simulator-Challenges: phases = ms Millisekunden laufen lassen, danach optional expect (Wert von PORTA/PORTB) */
 var SIM_CHALLENGES = [
   {
-    id: 'sim-led07', title: 'Nur LED 0 und 7',
-    text: 'Lass an PORTA nur die LEDs 0 und 7 leuchten – alle anderen bleiben aus. Tipp: Binär- oder Hex-Literal.',
+    id: 'sim-led07', title: 'Nur Bit 0 und Bit 7',
+    text: 'Speichere in einer `uint8_t`-Variable den Wert, bei dem nur Bit 0 und Bit 7 gesetzt sind, und gib sie auf PORTA aus. Tipp: Binär- oder Hex-Literal.',
     check: { phases: [{ ms: 300, expect: { A: 0x81 } }] }
   },
   {
-    id: 'sim-invert', title: 'Schalter umgekehrt',
-    text: 'Zeig auf PORTB das Gegenteil der Schalter an Port C: Schalter an → LED aus und umgekehrt. Tipp: Der Operator `~` dreht alle Bits um.',
-    check: { phases: [
-      { C: 0x00, ms: 80, expect: { B: 0xFF }, say: 'Alle Schalter aus' },
-      { C: 0x0F, ms: 80, expect: { B: 0xF0 }, say: 'Schalter 0–3 an' },
-      { C: 0xA5, ms: 80, expect: { B: 0x5A }, say: 'Schalter 0b10100101' }
-    ] }
+    id: 'sim-minus1', title: '−1 als int8_t',
+    text: 'Speichere −1 in einem `int8_t` und gib die Variable auf PORTA aus. Wie viele LEDs leuchten – und warum?',
+    check: { phases: [{ ms: 300, expect: { A: 0xFF } }] }
   },
   {
-    id: 'sim-count', title: 'Zähle mit Taster L0',
-    text: 'Jeder Druck auf Taster L0 erhöht einen `uint8_t`-Zähler um 1, angezeigt auf PORTA. Gedrückt halten darf nur einmal zählen! Tipp: den alten Tasterzustand merken und nur beim Wechsel von 0 auf 1 zählen.',
-    check: { phases: [
-      { L: 0, ms: 60 },
-      { L: 1, ms: 120 }, { L: 0, ms: 120 },
-      { L: 1, ms: 120 }, { L: 0, ms: 120 },
-      { L: 1, ms: 120 }, { L: 0, ms: 120, expect: { A: 3 }, say: 'Nach 3 Tastendrücken' }
-    ] }
+    id: 'sim-split', title: '1000 auf zwei Ports',
+    text: 'Speichere 1000 in einem passenden Typ. Zeig das High-Byte auf PORTA und das Low-Byte auf PORTB.',
+    check: { phases: [{ ms: 300, expect: { A: 0x03, B: 0xE8 } }] }
+  },
+  {
+    id: 'sim-fix', title: 'Festkomma: 23.7 °C',
+    text: 'Speichere 23.7 °C als Festkomma in Zehntelgrad (`int16_t`). Zeig auf PORTA die ganzen Grad (23) und auf PORTB die Nachkommastelle (7) – nur mit `/` und `%`.',
+    check: { phases: [{ ms: 300, expect: { A: 23, B: 7 } }] }
   },
   {
     id: 'sim-pingpong', title: 'Lauflicht hin und zurück',
-    text: 'Ein einzelnes Licht wandert auf PORTA von LED 0 bis LED 7 und dann wieder zurück zu LED 0 – immer weiter (mit `_delay_ms`).',
+    text: 'Ein einzelnes gesetztes Bit in einem `uint8_t` wandert auf PORTA von Bit 0 bis Bit 7 und dann wieder zurück zu Bit 0 – immer weiter (mit `_delay_ms`).',
     check: { phases: [{ ms: 12000 }], seq: { port: 'A', contains: [1, 2, 4, 8, 16, 32, 64, 128, 64, 32, 16, 8, 4, 2, 1] } }
   },
   {
-    id: 'sim-free-timer', title: 'Frei: Sekunden mit TCNT1',
-    text: 'Für Profis: Starte Timer 1 mit `TCCR1B = (1 << CS12) | (1 << CS10);` (Vorteiler 1024 → 15625 Takte pro Sekunde) und lass einen Sekundenzähler auf PORTA laufen, ohne `_delay_ms`. Welchen Typ braucht der Vergleichswert?'
+    id: 'sim-free-type', title: 'Frei: Der kleinste passende Typ',
+    text: 'Für Profis: Zähle in einer Variable von 0 bis 1000 in Zehnerschritten und zeig sie auf PORTA (High-Byte) und PORTB (Low-Byte). Welcher ist der kleinste Typ, der passt? Probier zuerst `uint8_t` und schau, was die Meldungen sagen.'
   }
 ];
 
