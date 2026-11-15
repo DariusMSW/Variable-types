@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  var LS_KEY = 'c-variablentypen-fortschritt-v5';
+  var LS_KEY = 'c-variablentypen-fortschritt-v6';
   var state = { solved: {} };     // taskId -> true (im 1. Versuch) / false
   var main, cheatPanel, cheatBtn;
 
@@ -398,7 +398,7 @@
     for (var ci = 0; ci < LEVELS.length; ci++) if (unlocked(ci) && !levelDone(ci)) { current = ci; break; }
     main.appendChild(el('section', { class: 'hero hero-home' }, [
       el('div', { class: 'hero-text' }, [
-        el('div', { class: 'eyebrow sticker' }, 'C-Typen auf dem ATmega2560 · 9 Levels'),
+        el('div', { class: 'eyebrow sticker' }, 'C-Typen auf dem ATmega2560 · 7 Levels'),
         el('h1', null, ['Welcher Typ ', el('span', { class: 'mark' }, 'passt'), '?']),
         el('p', { class: 'lead' }, t.done === 0
           ? 'Lerne Schritt für Schritt am Arduino Mega 2560, wie viele Bits jeder Typ hat, welche Werte hineinpassen, wie Kommazahlen als Festkomma funktionieren – und wie man den passenden Typ wählt. Starte mit Level 1!'
@@ -699,7 +699,7 @@
       el('div', { class: 'eyebrow' }, 'Abschlussprüfung bestanden'),
       el('h1', null, 'Herzlichen Glückwunsch!'),
       el('p', { class: 'big' }, 'Du hast ' + ef + ' von ' + LEVELS[exam].tasks.length + ' Prüfungsaufgaben im ersten Versuch richtig gelöst – insgesamt ' + allFirst + ' von ' + all + ' Aufgaben.'),
-      el('p', null, 'Du weisst jetzt, warum man Typen mit fester Grösse verwendet, wie gross sie sind, welche Werte hineinpassen, wie Bits, LEDs und Zweierkomplement zusammenhängen, wie du Kommazahlen als Festkomma speicherst, wie man sparsam Typen wählt, typische Typ-Fehler auf dem ATmega2560 erkennt und was bei Typumwandlungen passiert. Das ist eine richtig solide Grundlage!'),
+      el('p', null, 'Du weisst jetzt, warum man Typen mit fester Grösse verwendet, wie gross sie sind, welche Werte hineinpassen, wie Bits und Zweierkomplement zusammenhängen, wie du Kommazahlen als Festkomma speicherst, wie du den kleinsten passenden Typ wählst und was bei Überlauf und Typumwandlung passiert. Das ist eine richtig solide Grundlage!'),
       list,
       el('div', { class: 'actions' }, [
         el('button', { type: 'button', class: 'btn', onclick: showPlayground }, 'Zur Spielwiese'),
