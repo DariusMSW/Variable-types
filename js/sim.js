@@ -1691,14 +1691,14 @@
         el('section', { class: 'task-card sim-left', 'aria-label': 'Code' }, [
           el('div', { class: 'sim-ex-row' }, [el('label', { for: 'sim-ex' }, 'Beispiele:'), exSel, btn('Laden', loadEx, 'ghost')]),
           exDesc,
-          editor,
-          el('p', { id: 'sim-ed-help', class: 'small sim-help' }, rich('Tab rückt ein (Shift+Tab aus). Zum Verlassen des Editors: Esc, dann Tab. Strg+Enter startet. Der Code wird in deinem Browser gespeichert.')),
-          el('div', { class: 'sim-controls' }, [bStart, bPause, bStep, bReset]),
-          el('div', { class: 'sim-controls sim-meta' }, [
+          el('div', { class: 'sim-controls sim-top' }, [bStart, bPause, bStep, bReset]),
+          el('div', { class: 'sim-controls sim-meta sim-top' }, [
             el('label', { for: 'sim-speed' }, 'Tempo:'), speed, speedOut,
             el('span', { class: 'sim-sep' }, 'Zeit:'), timeOut,
             el('span', { class: 'sim-sep' }, 'Status:'), statusOut
           ]),
+          editor,
+          el('p', { id: 'sim-ed-help', class: 'small sim-help' }, rich('Tab rückt ein (Shift+Tab aus). Zum Verlassen des Editors: Esc, dann Tab. Strg+Enter startet. Der Code wird in deinem Browser gespeichert.')),
           el('h2', { class: 'sim-h' }, 'Meldungen'),
           cons
         ]),

@@ -546,6 +546,7 @@ button { font: inherit; color: inherit; }
 .sim-editor:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
 .sim-ed-body { display: grid; grid-template-columns: auto minmax(0, 1fr); }
 .sim-gutter { position: relative; overflow: hidden; padding: .6rem .45rem; color: var(--code-ln); text-align: right; user-select: none; border-right: 2px solid #000; min-width: 2.6em; }
+.sim-gut-inner { position: absolute; top: .6rem; left: .45rem; right: .45rem; }
 .sim-gut-inner > div { padding: 0 .2rem; border-radius: 2px; }
 .sim-gut-inner > div.cur { background: var(--yellow); color: #161512; font-weight: 800; }
 .sim-gut-inner > div.err { background: var(--coral); color: #161512; font-weight: 800; }
@@ -560,6 +561,8 @@ button { font: inherit; color: inherit; }
 .sim-ta::selection { background: rgba(90, 169, 255, .4); color: transparent; }
 .sim-help { margin: .5rem 0 .8rem; color: var(--muted); }
 .sim-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-top: .6rem; }
+.sim-controls.sim-top { margin: 0 0 .6rem; }
+.sim-controls.sim-meta.sim-top { margin-top: -.2rem; }
 .sim-meta { font-weight: 700; gap: .4rem .6rem; }
 .sim-meta label, .sim-sep { color: var(--muted); font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; font-weight: 800; }
 .sim-sep { margin-left: .4rem; }
