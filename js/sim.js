@@ -61,6 +61,8 @@
   ['A', 'B'].forEach(function (p) {
     ['DDR', 'PORT'].forEach(function (r) { REGS[r + p] = { ty: 'uint8_t' }; });
   });
+  /* 8 Schalter an PORTC: lesen mit PINC (Bit = 1, wenn Schalter an) */
+  REGS.DDRC = { ty: 'uint8_t' }; REGS.PORTC = { ty: 'uint8_t' }; REGS.PINC = { ty: 'uint8_t', ro: true };
   /* Hardware-Namen, die der Simulator bewusst nicht kennt: Es geht nur um Variablentypen. */
   var HW_UNSUP = /^(?:(?:DDR|PORT|PIN)[A-L]|P[A-L][0-7]|TCNT\d[HL]?|TCCR\d[A-C]?|OCR\d[A-C]?[HL]?|TIMSK\d|TIFR\d|ICR\d[HL]?|ADC[HLW]?|ADMUX|ADCSR[AB]|CS\d\d|WGM\d\d|ADPS\d|ADEN|ADSC|ADIE|ADIF|ADATE|ADLAR|REFS\d|MUX\d)$/;
   var HW_MSG = ' wird im Simulator nicht unterstützt – hier geht es um Variablentypen. Gib Werte direkt als Variable vor und zeig sie mit `PORTA = wert;` an.';
@@ -71,6 +73,7 @@
     ['A', 'B'].forEach(function (p) {
       PREDEF['P' + p + bb] = bb; PREDEF['PORT' + p + bb] = bb; PREDEF['DD' + p + bb] = bb;
     });
+    PREDEF['PC' + bb] = bb; PREDEF['PORTC' + bb] = bb; PREDEF['DDC' + bb] = bb; PREDEF['PINC' + bb] = bb;
   }
 
   var BUILTINS = { _delay_ms: { n: 1, ret: 'void' }, _delay_us: { n: 1, ret: 'void' }, _BV: { n: 1, ret: 'int16_t' } };
@@ -1015,11 +1018,14 @@
     return v;
   };
   M.peek = function (name) { return this.r[name]; };
-  M.readReg = function (name) { return this.peek(name); };
+  M.readReg = function (name) { return name === 'PINC' ? (this.pinc | 0) & 0xFF : this.peek(name); };
   /* Die LEDs zeigen PORTA/PORTB immer an – auch ohne gesetztes DDRA/DDRB (keine Hardware-Stolperfallen). */
   M.vis = function () { var r = this.r; return (r.PORTA << 8) | r.PORTB; };
   M.setPort = function (name, v) { var b = this.vis(); this.r[name] = v; if (this.vis() !== b) this.ledChanges++; };
-  M.writeReg = function (name, v) { this.setPort(name, v); };
+  M.writeReg = function (name, v, at) {
+    if (REGS[name].ro) throw new SimError('`' + name + '` kannst du nur lesen – es zeigt die Schalter an PORTC.', at && at.line, at && at.col);
+    this.setPort(name, v);
+  };
   M.loc = function* (t) {
     if (t.k === 'id') return t.ref === 'reg' ? { reg: t.name } : { v: this.lookup(t.name) };
     var a = this.lookup(t.a.name), i = yield* this.ev(t.i);
@@ -1282,7 +1288,7 @@
   var SPEEDS = [0.25, 0.5, 1, 2, 4, 0];
   var SPEED_LABEL = ['0.25×', '0.5×', '1×', '2×', '4×', 'Turbo'];
   var greeted = false;
-  var REG_SHOW = ['PORTA', 'PORTB'];
+  var REG_SHOW = ['PORTA', 'PORTB', 'PINC'];
 
   function showSim(main, H) {
     var el = H.el, clear = H.clear, rich = H.rich;
@@ -1471,9 +1477,25 @@
     }
     var ledA = ledRow('A'), ledB = ledRow('B');
 
-    var board = el('div', { class: 'sim-board', role: 'group', 'aria-label': 'LED-Anzeige: PORTA und PORTB zeigen Variablenwerte' }, [
+    /* 8 Schalter an PORTC (gelesen über PINC) */
+    var swState = 0, swBtns = [], swRow = el('div', { class: 'sim-leds' });
+    for (var sb = 7; sb >= 0; sb--) (function (b) {
+      var k = el('button', { type: 'button', class: 'sw', 'aria-pressed': 'false', 'aria-label': 'Schalter PC' + b, title: 'Schalter PC' + b + ' umschalten' });
+      k.addEventListener('click', function () {
+        swState ^= 1 << b;
+        var on = !!(swState >> b & 1);
+        k.classList.toggle('on', on); k.setAttribute('aria-pressed', String(on));
+        if (m) m.pinc = swState;
+        render(true);
+      });
+      swBtns[b] = k;
+      swRow.appendChild(el('span', { class: 'led-cell' }, [k, el('span', { class: 'led-no' }, String(b))]));
+    })(sb);
+    var swNode = el('div', { class: 'sim-port', role: 'group', 'aria-label': 'Schalter an PORTC, lesen mit PINC' }, [el('span', { class: 'sim-port-label' }, 'PINC'), swRow]);
+
+    var board = el('div', { class: 'sim-board', role: 'group', 'aria-label': 'Board: LEDs an PORTA und PORTB, Schalter an PORTC' }, [
       el('div', { class: 'sim-chip', 'aria-hidden': 'true' }, [el('strong', null, 'ATmega2560'), el('span', null, '16 MHz')]),
-      ledA.node, ledB.node
+      ledA.node, ledB.node, swNode
     ]);
 
     /* --- Variablen (Hauptteil) & LED-Werte --- */
@@ -1544,6 +1566,7 @@
       }
       errLine = 0;
       m = new Machine(c);
+      m.pinc = swState;
       runStart = performance.now(); lastDelayT = runStart; flickerSaid = false; lastChanges = 0;
       return true;
     }
@@ -1612,7 +1635,7 @@
     }
     function render(full) {
       var r = m ? m.r : null;
-      var get = function (n) { return m ? m.peek(n) : 0; };
+      var get = function (n) { return n === 'PINC' ? swState : m ? m.peek(n) : 0; };
       ledA.set(r ? r.PORTA : 0);
       ledB.set(r ? r.PORTB : 0);
       REG_SHOW.forEach(function (n) {
@@ -1660,7 +1683,7 @@
         el('div', { class: 'hero-text' }, [
           el('div', { class: 'eyebrow sticker' }, 'Simulator'),
           el('h1', null, ['C-Code auf dem ', el('span', { class: 'mark' }, 'ATmega2560')]),
-          el('p', { class: 'lead' }, 'Schreib ein kleines C-Programm mit Variablen und lass es laufen. Die Variablen-Tabelle zeigt Name, Typ, Wert und Bits live – und was beim Überlauf passiert. 8 + 8 LEDs an PORTA und PORTB zeigen Werte zusätzlich binär an.')
+          el('p', { class: 'lead' }, 'Schreib ein kleines C-Programm mit Variablen und lass es laufen. Die Variablen-Tabelle zeigt Name, Typ, Wert und Bits live – und was beim Überlauf passiert. 8 + 8 LEDs an PORTA und PORTB zeigen Werte zusätzlich binär an, und 8 Schalter an PORTC liest du mit PINC ein.')
         ]),
         bitBox
       ]),

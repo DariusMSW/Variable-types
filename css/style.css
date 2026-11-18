@@ -597,6 +597,9 @@ button.sim-msg:hover { background: rgba(255, 255, 255, .07); }
 .sim-port-label { font-weight: 800; font-size: .85rem; min-width: 4.2em; background: rgba(0, 0, 0, .35); padding: .15em .45em; border-radius: 3px; }
 .sim-leds { display: flex; gap: .3rem; flex-wrap: wrap; }
 .sim-board .led { border-color: #0B0B0B; }
+.sw { width: 1.35rem; height: 1.9rem; padding: 0; border: 2px solid #0B0B0B; border-radius: 4px; background: linear-gradient(#2A2A2A 50%, #E8E8E8 50%); cursor: pointer; }
+.sw.on { background: linear-gradient(#7CFF9B 50%, #2A2A2A 50%); }
+.sw:focus-visible { outline: 3px solid #FFD54A; outline-offset: 2px; }
 .sim-board .led-no { color: #CFE6D7; }
 .sim-table { margin-top: 1rem; border: var(--bw) solid var(--line); }
 .sim-table table { width: 100%; border-collapse: collapse; font-size: .85rem; }
