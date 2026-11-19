@@ -250,12 +250,13 @@
   'if else for while do return const static void break continue switch case default typedef'.split(' ').forEach(function (w) { KW[w] = 1; });
   /* 'int' nur fuer `int main(void)` */
   'int size_t int8_t uint8_t int16_t uint16_t int32_t uint32_t int64_t uint64_t'.split(' ').forEach(function (w) { TY[w] = 1; });
-  /* LED-Ausgaben PORTA/PORTB (nur Kulisse) und F_CPU */
-  var REG = /^(?:DDR|PORT)[AB]$/;
+  /* LED-Ausgaben PORTA/PORTB, RGB-LED PORTH, Schalter PINC, Taster PINL und F_CPU */
+  var REG = /^(?:(?:DDR|PORT)[ABCHL]|PIN[CL])$/;
   var REG_BIT = /^F_CPU$/;
   var TOKEN = /(\/\/.*$)|(\/\*.*?\*\/)|("(?:\\.|[^"\\])*")|('(?:\\.|[^'\\])*')|(____)|(\b0[xX][0-9a-fA-F]+\b|\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[fFuUlL]*)|([A-Za-z_]\w*)/g;
 
-  function highlightLine(line) {
+  /* mark: optional ein Name, dessen Vorkommen hervorgehoben werden (Simulator-Editor) */
+  function highlightLine(line, mark) {
     var frag = document.createDocumentFragment();
     if (/^\s*#/.test(line)) { frag.appendChild(el('span', { class: 'tok-pre' }, line)); return frag; }
     var last = 0, m;
@@ -267,7 +268,8 @@
       else if (m[3] || m[4]) cls = 'tok-str';
       else if (m[5]) cls = 'tok-blank';
       else if (m[6]) cls = /^0[xX]/.test(txt) ? 'tok-hex' : 'tok-num';
-      else if (m[7]) cls = TY[txt] ? 'tok-type' : REG.test(txt) ? 'tok-reg' : REG_BIT.test(txt) ? 'tok-pre' : (KW[txt] ? 'tok-kw' : (line.charAt(TOKEN.lastIndex) === '(' ? 'tok-fn' : null));
+      else if (m[7]) cls = TY[txt] ? 'tok-type' : (REG.test(txt) || (window.CSim && CSim.REGS[txt])) ? 'tok-reg' : REG_BIT.test(txt) ? 'tok-pre' : (KW[txt] ? 'tok-kw' : (line.charAt(TOKEN.lastIndex) === '(' ? 'tok-fn' : null));
+      if (mark && m[7] && txt === mark) cls = (cls ? cls + ' ' : '') + 'tok-occ';
       frag.appendChild(cls ? el('span', { class: cls }, txt) : document.createTextNode(txt));
       last = TOKEN.lastIndex;
     }
@@ -368,8 +370,8 @@
         tbody
       ])),
       el('p', { class: 'small' }, rich('Formeln: ohne Vorzeichen (`uintN_t`): 0 … 2ⁿ − 1, mit Vorzeichen (`intN_t`): −2ⁿ⁻¹ … 2ⁿ⁻¹ − 1.')),
-      el('p', { class: 'small' }, rich('Ausgabe in den Beispielen: 8 LEDs an `PORTA` (und `PORTB`) zeigen die Bits einer Variable. 16 Bit auf LEDs: `PORTA = wert >> 8; PORTB = wert & 0xFF;`')),
-      el('p', { class: 'small' }, rich('Festkomma: Wert × Faktor (10, 100, 1000) als Ganzzahl, z.B. 3.84 km → 3840 m → `uint16_t`. Typ nach dem skalierten Bereich wählen.')),
+      el('p', { class: 'small' }, rich('Ausgabe in den Beispielen: 8 LEDs an `PORTA` (und `PORTB`) zeigen die Bits einer Variable. 16 Bit auf LEDs: `PORTB = wert >> 8; PORTA = wert & 0xFF;`')),
+      el('p', { class: 'small' }, rich('Festkomma: in eine kleinere Einheit umrechnen und als Ganzzahl speichern, z.B. 3.84 km → 3840 m, 4.8 V → 4800 mV, 1.75 m → 175 cm. Typ nach dem umgerechneten Bereich wählen.')),
       el('p', { class: 'small' }, rich('Umwandlung: Zuweisung an einen kleineren Typ behält nur die unteren Bits (`(uint8_t)300` = 44). Kleine Typen werden zum Rechnen zu `int` (16 Bit). Bytes zusammensetzen: `(uint16_t)hi << 8 | lo`.'))
     ]);
   }
@@ -815,7 +817,7 @@
     var strips = [];
     if (opts.leds) {
       if (n === 8) strips.push({ s: ledStrip('LEDs an PORTA'), shift: 0n });
-      else { strips.push({ s: ledStrip('PORTA (High-Byte)'), shift: 8n }); strips.push({ s: ledStrip('PORTB (Low-Byte)'), shift: 0n }); }
+      else { strips.push({ s: ledStrip('PORTB (High-Byte)'), shift: 8n }); strips.push({ s: ledStrip('PORTA (Low-Byte)'), shift: 0n }); }
       strips.forEach(function (x) { x.s.node.setAttribute('role', 'img'); });
     }
     for (var i = 0; i < n; i++) bits.push(0);
