@@ -2289,16 +2289,51 @@
     ['pointerup', 'pointercancel', 'lostpointercapture', 'blur'].forEach(function (ev) { joyKey.addEventListener(ev, function () { joySet(false); }); });
     joyKey.addEventListener('keydown', function (e) { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); joySet(true); } });
     joyKey.addEventListener('keyup', function (e) { if (e.key === ' ' || e.key === 'Enter') joySet(false); });
-    var joyCard = el('div', { class: 'periph-card' }, [
-      el('h3', null, 'Joystick'),
-      el('div', { class: 'joy-row' }, [pad, el('div', { class: 'joy-side' }, [el('span', { class: 'led-cell' }, [joyKey, el('span', { class: 'led-no' }, 'PE2')]), el('span', { class: 'small' }, 'Taste')])]),
+    var joyBox = el('div', { class: 'board-part' }, [
+      el('span', { class: 'part-label' }, 'Joystick · ADC10 / ADC11'),
+      el('div', { class: 'joy-row' }, [pad, el('span', { class: 'led-cell' }, [joyKey, el('span', { class: 'led-no' }, 'PE2')])]),
       joyOut
     ]);
 
+    /* Potentiometer 1 (ADC8) und 2 (ADC9): Drehknopf auf dem Board */
+    function potKnob(ch, name) {
+      var val = 250, mark = el('span', { class: 'pot-mark' });
+      var knobEl = el('div', { class: 'pot', tabindex: '0', role: 'slider', 'aria-label': name + ' (ADC' + ch + ')', 'aria-valuemin': '0', 'aria-valuemax': '500',
+        title: name + ': ziehen, Mausrad oder Pfeiltasten' }, mark);
+      var out = el('output', { class: 'sens-out' });
+      function set(v) {
+        val = Math.max(0, Math.min(500, Math.round(v)));
+        var u = val / 100;
+        volts[ch] = u;
+        mark.style.transform = 'rotate(' + (-135 + val / 500 * 270) + 'deg)';
+        var t = u.toFixed(2) + ' V → ADC' + ch + ' ≈ ' + adcOf(u);
+        out.textContent = t;
+        knobEl.setAttribute('aria-valuenow', String(val));
+        knobEl.setAttribute('aria-valuetext', t);
+      }
+      var drag = null;
+      knobEl.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0) return;
+        e.preventDefault(); knobEl.focus();
+        try { knobEl.setPointerCapture(e.pointerId); } catch (x) { /* egal */ }
+        drag = { x: e.clientX, y: e.clientY, v: val };
+      });
+      knobEl.addEventListener('pointermove', function (e) { if (drag) set(drag.v + ((e.clientX - drag.x) - (e.clientY - drag.y)) * 2.5); });
+      ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (ev) { knobEl.addEventListener(ev, function () { drag = null; }); });
+      knobEl.addEventListener('wheel', function (e) { e.preventDefault(); set(val + (e.deltaY < 0 ? 10 : -10)); }, { passive: false });
+      knobEl.addEventListener('keydown', function (e) {
+        var d = { ArrowUp: 5, ArrowRight: 5, ArrowDown: -5, ArrowLeft: -5, PageUp: 50, PageDown: -50 }[e.key];
+        if (e.key === 'Home') { e.preventDefault(); set(0); return; }
+        if (e.key === 'End') { e.preventDefault(); set(500); return; }
+        if (d) { e.preventDefault(); set(val + d); }
+      });
+      set(val);
+      return el('div', { class: 'board-part pot-part' }, [el('span', { class: 'part-label' }, name + ' · ADC' + ch), knobEl, out]);
+    }
+    var analogNode = el('div', { class: 'sim-analog', role: 'group', 'aria-label': 'Joystick und Potentiometer' }, [joyBox, potKnob(8, 'Poti 1'), potKnob(9, 'Poti 2')]);
+
     /* Schieberegler für Potis und Sensoren */
     var SENS = [
-      { ch: 8, name: 'Potentiometer 1', min: 0, max: 500, val: 250, fmt: null, volt: function (v) { return v / 100; } },
-      { ch: 9, name: 'Potentiometer 2', min: 0, max: 500, val: 250, fmt: null, volt: function (v) { return v / 100; } },
       { ch: 12, name: 'Lichtsensor', min: 0, max: 100, val: 50, fmt: function (v) { return v + ' % hell'; }, volt: function (v) { return v * 0.05; } },
       { ch: 13, name: 'Temperatur (LM35, 10 mV/°C)', min: 0, max: 100, val: 22, fmt: function (v) { return v + ' °C'; }, volt: function (v) { return v * 0.01; } },
       { ch: 14, name: 'Hallsensor 1 (Magnet)', min: -100, max: 100, val: 0, fmt: function (v) { return (v > 0 ? '+' : '') + v + ' % Feld'; }, volt: function (v) { return 2.5 + v * 0.02; } },
@@ -2318,7 +2353,7 @@
       apply();
       return el('div', { class: 'sens-row' }, [el('label', { for: id }, S.name), inp, out]);
     });
-    var sensCard = el('div', { class: 'periph-card periph-wide' }, [el('h3', null, 'Analoge Sensoren (A/D-Wandler)'), el('div', { class: 'sens-list' }, sensRows)]);
+    var sensCard = el('div', { class: 'periph-card periph-wide' }, [el('h3', null, 'Sensoren (A/D-Wandler)'), el('div', { class: 'sens-list' }, sensRows)]);
 
     /* Servos an PE3 (OC3A) und PE4 (OC3B) */
     function servoView(name, pin) {
@@ -2362,8 +2397,8 @@
 
     var periph = el('section', { class: 'task-card sim-periph', 'aria-labelledby': 'sim-periph-title' }, [
       el('h2', { id: 'sim-periph-title' }, 'Board-Peripherie'),
-      el('p', { class: 'small' }, rich('Wie auf dem echten Board: Die Sensoren liest du über den A/D-Wandler (`ADMUX`, `ADCSRA`, `ADCSRB`, `ADC`, Kanal 8–15 mit `MUX5`), die Servos steuerst du mit Timer 3, das LCD über `PORTG` und die Matrix über `PORTJ`. Fertige Beispiele findest du oben in der Liste.')),
-      el('div', { class: 'periph-grid' }, [joyCard, servoCard, mxCard, sensCard])
+      el('p', { class: 'small' }, rich('Wie auf dem echten Board: Die Sensoren liest du über den A/D-Wandler (`ADMUX`, `ADCSRA`, `ADCSRB`, `ADC`, Kanal 8–15 mit `MUX5`), die Servos steuerst du mit Timer 3, das LCD über `PORTG` und die Matrix über `PORTJ`. Joystick und Potis sitzen oben auf dem Board. Fertige Beispiele findest du oben in der Liste.')),
+      el('div', { class: 'periph-grid' }, [servoCard, mxCard, sensCard])
     ]);
     function periphPaint() {
       lcdPaint();
@@ -2374,7 +2409,7 @@
 
     var board = el('div', { class: 'sim-board', role: 'group', 'aria-label': 'Board: LCD, LEDs an PORTA und PORTB, RGB-LED an PORTH, Schalter an PORTC, Taster an PORTL' }, [
       el('div', { class: 'sim-chip', 'aria-hidden': 'true' }, [el('strong', null, 'ATmega2560'), el('span', null, '16 MHz')]),
-      lcdNode, ledA.node, ledB.node, rgbNode, swNode, plNode
+      lcdNode, ledA.node, ledB.node, rgbNode, swNode, plNode, analogNode
     ]);
 
     /* --- Variablen (Hauptteil) & LED-Werte --- */
